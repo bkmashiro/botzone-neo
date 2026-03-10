@@ -10,6 +10,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { ConfigService } from '@nestjs/config';
+import { trace } from '@opentelemetry/api';
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
@@ -27,6 +28,8 @@ interface CacheEntry {
   lastAccess: number;
 }
 
+const tracer = trace.getTracer('botzone-neo', '1.0.0');
+
 @Injectable()
 export class CompileService {
   private readonly logger = new Logger(CompileService.name);
@@ -34,7 +37,7 @@ export class CompileService {
   private readonly cache: Map<string, CacheEntry> = new Map();
   private readonly cacheDir: string;
   private readonly timeLimitMs: number;
-  private readonly maxCacheSize = 200;
+  private readonly maxCacheSize: number;
 
   constructor(
     private readonly configService: ConfigService,
@@ -48,6 +51,7 @@ export class CompileService {
 
     this.cacheDir = path.join(process.cwd(), '.cache', 'compile');
     this.timeLimitMs = this.configService.get<number>('COMPILE_TIME_LIMIT_MS', 10000);
+    this.maxCacheSize = this.configService.get<number>('COMPILE_CACHE_SIZE', 200);
   }
 
   /**
@@ -57,59 +61,72 @@ export class CompileService {
    * @throws CompileError
    */
   async compile(language: string, source: string): Promise<CompiledBot> {
-    const lang = this.languages.get(language);
-    if (!lang) {
-      throw new CompileError(`不支持的语言: ${language}`);
-    }
+    return tracer.startActiveSpan('CompileService.compile', async (span) => {
+      span.setAttribute('compile.language', language);
 
-    const hash = crypto.createHash('md5').update(`${language}:${source}`).digest('hex');
+      try {
+        const lang = this.languages.get(language);
+        if (!lang) {
+          throw new CompileError(`不支持的语言: ${language}`);
+        }
 
-    // 检查缓存
-    const cached = this.cache.get(hash);
-    if (cached) {
-      cached.lastAccess = Date.now();
-      this.cacheHits.inc();
-      this.logger.debug(`编译缓存命中: ${hash}`);
-      return cached.compiled;
-    }
+        const hash = crypto.createHash('md5').update(`${language}:${source}`).digest('hex');
 
-    this.cacheMisses.inc();
+        // 检查缓存
+        const cached = this.cache.get(hash);
+        if (cached) {
+          cached.lastAccess = Date.now();
+          this.cacheHits.inc();
+          span.setAttribute('compile.cacheHit', true);
+          this.logger.debug(`编译缓存命中: ${hash}`);
+          return cached.compiled;
+        }
 
-    // 准备编译目录
-    const compileDir = path.join(this.cacheDir, hash);
-    await fs.mkdir(compileDir, { recursive: true });
+        span.setAttribute('compile.cacheHit', false);
+        this.cacheMisses.inc();
 
-    const sourcePath = path.join(compileDir, `main${lang.extension}`);
-    const outputPath = path.join(compileDir, 'main');
-    await fs.writeFile(sourcePath, source, 'utf-8');
+        // 准备编译目录
+        const compileDir = path.join(this.cacheDir, hash);
+        await fs.mkdir(compileDir, { recursive: true });
 
-    // 执行编译
-    const { cmd, args } = lang.getCompileCommand(sourcePath, outputPath);
-    this.logger.debug(`编译命令: ${cmd} ${args.join(' ')}`);
+        const sourcePath = path.join(compileDir, `main${lang.extension}`);
+        const outputPath = path.join(compileDir, 'main');
+        await fs.writeFile(sourcePath, source, 'utf-8');
 
-    const result = await this.runCompiler(cmd, args);
+        // 执行编译
+        const { cmd, args } = lang.getCompileCommand(sourcePath, outputPath);
+        this.logger.debug(`编译命令: ${cmd} ${args.join(' ')}`);
 
-    if (result.exitCode !== 0) {
-      throw new CompileError(
-        result.stderr || result.stdout || '编译失败',
-        result.stderr || result.stdout,
-      );
-    }
+        const result = await this.runCompiler(cmd, args);
 
-    // 构建 CompiledBot
-    const runCmd = lang.getRunCommand(sourcePath, outputPath);
-    const compiled: CompiledBot = {
-      cmd: runCmd.cmd,
-      args: runCmd.args,
-      language: lang.name,
-      readonlyMounts: lang.getReadonlyMounts(),
-    };
+        if (result.exitCode !== 0) {
+          throw new CompileError(
+            result.stderr || result.stdout || '编译失败',
+            result.stderr || result.stdout,
+          );
+        }
 
-    // 更新缓存
-    this.cache.set(hash, { compiled, lastAccess: Date.now() });
-    this.evictCache();
+        // 构建 CompiledBot
+        const runCmd = lang.getRunCommand(sourcePath, outputPath);
+        const compiled: CompiledBot = {
+          cmd: runCmd.cmd,
+          args: runCmd.args,
+          language: lang.name,
+          readonlyMounts: lang.getReadonlyMounts(),
+        };
 
-    return compiled;
+        // 更新缓存
+        this.cache.set(hash, { compiled, lastAccess: Date.now() });
+        this.evictCache();
+
+        return compiled;
+      } catch (err) {
+        span.recordException(err instanceof Error ? err : new Error(String(err)));
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
   }
 
   getLanguage(name: string): ILanguage | undefined {
@@ -158,16 +175,18 @@ export class CompileService {
   }
 
   private evictCache(): void {
-    if (this.cache.size <= this.maxCacheSize) return;
-
-    const entries = Array.from(this.cache.entries()).sort(
-      (a, b) => a[1].lastAccess - b[1].lastAccess,
-    );
-
-    const toRemove = entries.slice(0, entries.length - this.maxCacheSize);
-    for (const [key] of toRemove) {
-      this.cache.delete(key);
-      const dir = path.join(this.cacheDir, key);
+    while (this.cache.size > this.maxCacheSize) {
+      let oldestKey: string | undefined;
+      let oldestTime = Infinity;
+      for (const [key, entry] of this.cache) {
+        if (entry.lastAccess < oldestTime) {
+          oldestTime = entry.lastAccess;
+          oldestKey = key;
+        }
+      }
+      if (!oldestKey) break;
+      this.cache.delete(oldestKey);
+      const dir = path.join(this.cacheDir, oldestKey);
       fs.rm(dir, { recursive: true, force: true }).catch((err) => {
         this.logger.warn(`缓存清理失败: ${dir}: ${err}`);
       });

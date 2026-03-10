@@ -152,4 +152,113 @@ describe('CompileService (infrastructure)', () => {
       expect(result.language).toBe('cpp');
     });
   });
+
+  describe('runCompiler edge cases', () => {
+    it('should handle compiler timeout (SIGKILL)', async () => {
+      // Create service with very short compile timeout
+      const shortConfig = {
+        get: jest.fn((key: string, defaultVal: unknown) => {
+          if (key === 'COMPILE_TIME_LIMIT_MS') return 50;
+          return defaultVal;
+        }),
+      } as unknown as ConfigService;
+      const shortService = new CompileService(
+        shortConfig,
+        { inc: jest.fn() } as never,
+        { inc: jest.fn() } as never,
+      );
+
+      const emitter = new EventEmitter();
+      const child = Object.assign(emitter, {
+        stdout: new EventEmitter(),
+        stderr: new EventEmitter(),
+        stdin: { write: jest.fn(), end: jest.fn() },
+        kill: jest.fn(),
+      }) as unknown as ChildProcess;
+
+      mockSpawn.mockReturnValue(child);
+
+      // Child never emits 'close', so the timeout fires
+      await expect(shortService.compile('cpp', 'infinite loop')).rejects.toThrow('编译超时');
+      expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+    }, 10000);
+
+    it('should reject on spawn error', async () => {
+      const emitter = new EventEmitter();
+      const child = Object.assign(emitter, {
+        stdout: new EventEmitter(),
+        stderr: new EventEmitter(),
+        stdin: { write: jest.fn(), end: jest.fn() },
+        kill: jest.fn(),
+      }) as unknown as ChildProcess;
+
+      mockSpawn.mockReturnValue(child);
+
+      const promise = service.compile('cpp', 'some code');
+      // Delay emit to ensure listeners are attached after span setup
+      await new Promise((r) => {
+        setTimeout(r, 0);
+      });
+      child.emit('error', new Error('ENOENT'));
+
+      await expect(promise).rejects.toThrow('ENOENT');
+    });
+
+    it('should handle null exit code', async () => {
+      const emitter = new EventEmitter();
+      const child = Object.assign(emitter, {
+        stdout: new EventEmitter(),
+        stderr: new EventEmitter(),
+        stdin: { write: jest.fn(), end: jest.fn() },
+        kill: jest.fn(),
+      }) as unknown as ChildProcess;
+
+      mockSpawn.mockReturnValue(child);
+
+      const promise = service.compile('cpp', 'code with null exit');
+      // Delay emit to ensure listeners are attached after span setup
+      await new Promise((r) => {
+        setTimeout(r, 0);
+      });
+      child.emit('close', null);
+
+      await expect(promise).rejects.toThrow(CompileError);
+    });
+
+    it('should use stdout as error when stderr is empty but stdout has content', async () => {
+      mockSpawn.mockReturnValue(createFakeChild(1, 'stdout error', ''));
+
+      try {
+        await service.compile('cpp', 'bad code stdout');
+        fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(CompileError);
+        expect((err as CompileError).message).toContain('stdout error');
+      }
+    });
+  });
+
+  describe('cache hit metrics', () => {
+    it('should increment cache hit counter on cache hit', async () => {
+      const mockCacheHits = { inc: jest.fn() };
+      const mockCacheMisses = { inc: jest.fn() };
+      const configService = {
+        get: jest.fn((_key: string, defaultVal: unknown) => defaultVal),
+      } as unknown as ConfigService;
+
+      const svc = new CompileService(
+        configService,
+        mockCacheHits as never,
+        mockCacheMisses as never,
+      );
+
+      mockSpawn.mockReturnValue(createFakeChild(0));
+
+      await svc.compile('cpp', 'int main() { return 99; }');
+      expect(mockCacheMisses.inc).toHaveBeenCalledTimes(1);
+
+      await svc.compile('cpp', 'int main() { return 99; }');
+      expect(mockCacheHits.inc).toHaveBeenCalledTimes(1);
+    });
+  });
 });
