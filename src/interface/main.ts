@@ -3,7 +3,7 @@
  */
 
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger as NestLogger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -61,5 +61,16 @@ async function bootstrap(): Promise<void> {
   await app.listen(port);
   logger.log(`Botzone Judger 已启动，监听端口 ${port}`);
 }
+
+// 全局未捕获错误处理
+const processLogger = new NestLogger('Process');
+process.on('unhandledRejection', (reason) => {
+  processLogger.error(`Unhandled Rejection: ${reason}`);
+});
+
+process.on('uncaughtException', (err) => {
+  processLogger.error(`Uncaught Exception: ${err.message}`, err.stack);
+  process.exit(1);
+});
 
 bootstrap();

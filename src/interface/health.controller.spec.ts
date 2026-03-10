@@ -1,5 +1,8 @@
 import { HealthController } from './health.controller';
 import { Queue } from 'bull';
+import * as fs from 'fs/promises';
+
+jest.mock('fs/promises');
 
 describe('HealthController', () => {
   let controller: HealthController;
@@ -9,6 +12,7 @@ describe('HealthController', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (fs.access as jest.Mock).mockResolvedValue(undefined);
     controller = new HealthController(mockQueue as unknown as Queue);
   });
 
@@ -31,5 +35,16 @@ describe('HealthController', () => {
     expect(result.components.redis.status).toBe('error');
     expect(result.components.redis.message).toContain('Connection refused');
     expect(result.components.disk.status).toBe('ok');
+  });
+
+  it('should return degraded status when disk check fails', async () => {
+    (fs.access as jest.Mock).mockRejectedValueOnce(new Error('EACCES'));
+
+    const result = await controller.check();
+
+    expect(result.status).toBe('degraded');
+    expect(result.components.disk.status).toBe('error');
+    expect(result.components.disk.message).toContain('EACCES');
+    expect(result.components.redis.status).toBe('ok');
   });
 });

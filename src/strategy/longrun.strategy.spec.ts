@@ -127,4 +127,114 @@ describe('LongrunStrategy (src/strategy)', () => {
     await expect(strategy.afterRound(mockBotCtx)).resolves.toBeUndefined();
     await expect(strategy.cleanup(mockBotCtx)).resolves.toBeUndefined();
   });
+
+  it('should return empty response on timeout', async () => {
+    jest.useFakeTimers();
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    // stdin.write does nothing, no stdout data emitted → timeout fires
+    const promise = strategy.runRound(
+      { ...mockBotCtx, limit: { time: 100, memory: 256 } },
+      mockInput,
+    );
+    jest.advanceTimersByTime(200);
+    const output = await promise;
+
+    expect(output.response).toBe('');
+    expect(output.debug).toContain('TLE');
+    jest.useRealTimers();
+  });
+
+  it('should return empty response when process has already exited', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    // First round: normal
+    (child.stdin as unknown as { write: jest.Mock }).write.mockImplementation(() => {
+      process.nextTick(() => {
+        child.stdout!.emit('data', Buffer.from('{"response":"r1"}\n'));
+      });
+      return true;
+    });
+    await strategy.runRound(mockBotCtx, mockInput);
+
+    // Simulate process exit
+    child.emit('exit', 1);
+
+    // Second round: process already exited
+    const output = await strategy.runRound(mockBotCtx, mockInput);
+    expect(output.response).toBe('');
+    expect(output.debug).toContain('进程已退出');
+  });
+
+  it('should return EPIPE debug when stdin write throws', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    (child.stdin as unknown as { write: jest.Mock }).write.mockImplementation(() => {
+      throw new Error('write EPIPE');
+    });
+
+    const output = await strategy.runRound(mockBotCtx, mockInput);
+    expect(output.response).toBe('');
+    expect(output.debug).toContain('EPIPE');
+  });
+
+  it('should handle plain text (non-JSON) output', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    (child.stdin as unknown as { write: jest.Mock }).write.mockImplementation(() => {
+      process.nextTick(() => {
+        child.stdout!.emit('data', Buffer.from('plain text output\n'));
+      });
+      return true;
+    });
+
+    const output = await strategy.runRound(mockBotCtx, mockInput);
+    expect(output.response).toBe('plain text output');
+  });
+
+  it('should handle signal errors gracefully', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    (child.stdin as unknown as { write: jest.Mock }).write.mockImplementation(() => {
+      process.nextTick(() => {
+        child.stdout!.emit('data', Buffer.from('{"response":"ok"}\n'));
+      });
+      return true;
+    });
+    await strategy.runRound(mockBotCtx, mockInput);
+
+    // Make kill throw
+    (child.kill as jest.Mock).mockImplementation(() => {
+      throw new Error('ESRCH');
+    });
+
+    // afterRound calls signal('SIGSTOP') which should catch the error
+    await expect(strategy.afterRound(mockBotCtx)).resolves.toBeUndefined();
+  });
+
+  it('should re-throw non-EPIPE stdin errors', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    (child.stdin as unknown as { write: jest.Mock }).write.mockImplementation(() => {
+      process.nextTick(() => {
+        child.stdout!.emit('data', Buffer.from('{"response":"ok"}\n'));
+      });
+      return true;
+    });
+    await strategy.runRound(mockBotCtx, mockInput);
+
+    // Emit a non-EPIPE error on stdin
+    expect(() => {
+      (child.stdin as unknown as EventEmitter).emit(
+        'error',
+        Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' }),
+      );
+    }).toThrow('ECONNRESET');
+  });
 });

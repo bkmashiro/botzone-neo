@@ -84,6 +84,28 @@ describe('JudgeController', () => {
       expect(judgeService.enqueue).toHaveBeenCalledWith(taskDto);
     });
 
+    it('应该在不信任 IP 时抛出 ForbiddenException', async () => {
+      judgeService.getTrustIps.mockReturnValueOnce(['10.0.0.1']);
+
+      const untrustedReq = {
+        headers: {},
+        socket: { remoteAddress: '192.168.1.1' },
+      } as unknown as Request;
+
+      const taskDto: TaskDto = {
+        game: {
+          judger: {
+            language: 'cpp',
+            source: '// j',
+            limit: { time: 3000, memory: 256 },
+          },
+        },
+        callback: { update: 'http://u', finish: 'http://f' },
+      };
+
+      await expect(controller.submitTask(taskDto, untrustedReq)).rejects.toThrow('不信任的来源 IP');
+    });
+
     it('应该支持包含 initdata 的 Task', async () => {
       const taskDto: TaskDto = {
         game: {

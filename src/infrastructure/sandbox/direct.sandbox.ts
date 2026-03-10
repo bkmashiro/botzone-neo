@@ -7,7 +7,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { spawn } from 'child_process';
-import { ISandbox, SandboxRequest, SandboxResult } from './sandbox.interface';
+import { ISandbox, SandboxRequest, SandboxResult, MAX_OUTPUT_BYTES } from './sandbox.interface';
 
 @Injectable()
 export class DirectSandbox implements ISandbox {
@@ -27,13 +27,21 @@ export class DirectSandbox implements ISandbox {
       let stdout = '';
       let stderr = '';
       let timedOut = false;
+      let stdoutBytes = 0;
+      let stderrBytes = 0;
 
       child.stdout.on('data', (data: Buffer) => {
-        stdout += data.toString();
+        if (stdoutBytes < MAX_OUTPUT_BYTES) {
+          stdout += data.toString();
+          stdoutBytes += data.length;
+        }
       });
 
       child.stderr.on('data', (data: Buffer) => {
-        stderr += data.toString();
+        if (stderrBytes < MAX_OUTPUT_BYTES) {
+          stderr += data.toString();
+          stderrBytes += data.length;
+        }
       });
 
       const timer = setTimeout(() => {

@@ -77,7 +77,7 @@ import { NsjailSandbox } from '../infrastructure/sandbox/nsjail.sandbox';
     {
       provide: SANDBOX_TOKEN,
       useFactory: (config: ConfigService) => {
-        const sandboxType = config.get<string>('SANDBOX_TYPE', 'direct');
+        const sandboxType = config.get<string>('SANDBOX_BACKEND', 'direct');
         if (sandboxType === 'nsjail') {
           return new NsjailSandbox(config);
         }

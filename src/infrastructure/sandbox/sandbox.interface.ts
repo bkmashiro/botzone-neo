@@ -36,6 +36,9 @@ export interface SandboxRequest {
 /** NestJS DI token */
 export const SANDBOX_TOKEN = Symbol('ISandbox');
 
+/** 最大 stdout/stderr 输出大小（16MB），防止 OOM */
+export const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
+
 /**
  * 沙箱接口
  *
