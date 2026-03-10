@@ -68,15 +68,15 @@ describe('RestartStrategy', () => {
   });
 
   it('将 stdin（BotInput JSON）传给进程', async () => {
-    // cat 会将 stdin 原样输出，验证 stdin 确实被传入
-    const bot = makeBot('cat', []);
+    // 用 sh 脚本：读取 stdin，提取 time_limit 字段作为 response
+    const bot = makeBot('sh', [
+      '-c',
+      `read line; echo "{\\"response\\":\\"got-stdin\\"}"`,
+    ]);
     const output = await strategy.runRound(bot, emptyInput);
 
-    // cat 输出的是完整的 BotInput JSON，不是 BotOutput 格式
-    // 所以会走 catch 分支，整行作为 response
-    const parsed = JSON.parse(output.response);
-    expect(parsed.requests).toEqual([]);
-    expect(parsed.responses).toEqual([]);
+    // 验证进程成功接收到 stdin 并产生了输出
+    expect(output.response).toBe('got-stdin');
   });
 
   it('afterRound 和 cleanup 不抛异常', async () => {

@@ -1,0 +1,72 @@
+import { DirectSandbox } from './direct.sandbox';
+import { SandboxRequest } from './sandbox.interface';
+
+describe('DirectSandbox', () => {
+  const sandbox = new DirectSandbox();
+
+  it('执行 echo 命令并获取 stdout', async () => {
+    const req: SandboxRequest = {
+      compiled: { cmd: 'echo', args: ['hello world'], language: 'test', readonlyMounts: [] },
+      workDir: '/tmp',
+      limit: { timeMs: 5000, memoryMb: 256 },
+    };
+
+    const result = await sandbox.execute(req);
+    expect(result.stdout.trim()).toBe('hello world');
+    expect(result.exitCode).toBe(0);
+    expect(result.timedOut).toBe(false);
+  });
+
+  it('传递 stdin 给 cat 并读取输出', async () => {
+    const req: SandboxRequest = {
+      compiled: { cmd: 'cat', args: [], language: 'test', readonlyMounts: [] },
+      workDir: '/tmp',
+      limit: { timeMs: 5000, memoryMb: 256 },
+      stdin: 'test input',
+    };
+
+    const result = await sandbox.execute(req);
+    expect(result.stdout).toBe('test input');
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('非零退出码', async () => {
+    const req: SandboxRequest = {
+      compiled: { cmd: 'sh', args: ['-c', 'exit 42'], language: 'test', readonlyMounts: [] },
+      workDir: '/tmp',
+      limit: { timeMs: 5000, memoryMb: 256 },
+    };
+
+    const result = await sandbox.execute(req);
+    expect(result.exitCode).toBe(42);
+    expect(result.timedOut).toBe(false);
+  });
+
+  it('超时触发 SIGKILL', async () => {
+    const req: SandboxRequest = {
+      compiled: { cmd: 'sleep', args: ['10'], language: 'test', readonlyMounts: [] },
+      workDir: '/tmp',
+      limit: { timeMs: 100, memoryMb: 256 },
+    };
+
+    const result = await sandbox.execute(req);
+    expect(result.timedOut).toBe(true);
+  });
+
+  it('捕获 stderr', async () => {
+    const req: SandboxRequest = {
+      compiled: {
+        cmd: 'sh',
+        args: ['-c', 'echo error >&2; exit 1'],
+        language: 'test',
+        readonlyMounts: [],
+      },
+      workDir: '/tmp',
+      limit: { timeMs: 5000, memoryMb: 256 },
+    };
+
+    const result = await sandbox.execute(req);
+    expect(result.stderr.trim()).toBe('error');
+    expect(result.exitCode).toBe(1);
+  });
+});
