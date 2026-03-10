@@ -1,155 +1,94 @@
 /**
- * 编译服务
+ * CompileService — LRU 缓存 + CompileJob 注入
  *
- * 支持 C++、Python、TypeScript 的编译/语法检查，
- * 使用 LRU 文件缓存避免重复编译（按 MD5(source+lang) 缓存）。
- *
- * 成功返回 CompiledBot，失败抛出 CompileError。
+ * 上层通过此服务编译代码，自动 LRU 缓存避免重复编译。
+ * 内部委托 CompileJob 执行实际编译。
  */
 
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { spawn } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { CompiledBot } from '../../domain/bot';
-import { CompileError } from '../../domain/verdict';
+import { CompileJob, CompileInput } from '../process/jobs/compile.job';
+import { CompiledArtifact } from '../process/jobs/compile.job.types';
 import { ILanguage } from './languages/language.interface';
 import { CppLanguage } from './languages/cpp.language';
 import { PythonLanguage } from './languages/python.language';
 import { TypeScriptLanguage } from './languages/typescript.language';
+import { CompileError } from '../../domain/verdict';
 
+/** LRU 缓存条目 */
 interface CacheEntry {
-  compiled: CompiledBot;
+  artifact: CompiledArtifact;
   lastAccess: number;
 }
 
 @Injectable()
 export class CompileService {
   private readonly logger = new Logger(CompileService.name);
-  private readonly languages: Map<string, ILanguage> = new Map();
   private readonly cache: Map<string, CacheEntry> = new Map();
   private readonly cacheDir: string;
-  private readonly timeLimitMs: number;
   private readonly maxCacheSize = 200;
+  private readonly compileJob: CompileJob;
 
   constructor(private readonly configService: ConfigService) {
+    // 注册支持的语言
+    const languages = new Map<string, ILanguage>();
     const langs: ILanguage[] = [
       new CppLanguage(),
       new PythonLanguage(),
       new TypeScriptLanguage(),
     ];
     for (const lang of langs) {
-      this.languages.set(lang.name, lang);
+      languages.set(lang.name, lang);
     }
 
     this.cacheDir = path.join(process.cwd(), '.cache', 'compile');
-    this.timeLimitMs = this.configService.get<number>('COMPILE_TIME_LIMIT_MS', 10000);
+    const timeLimitMs = this.configService.get<number>('COMPILE_TIME_LIMIT_MS', 10000);
+    this.compileJob = new CompileJob(languages, timeLimitMs);
   }
 
   /**
-   * 编译源代码
+   * 编译源代码（带 LRU 缓存）
    *
-   * @returns CompiledBot — 如何运行这个已编译的程序
-   * @throws CompileError — 编译失败
+   * @returns 编译产物
+   * @throws CompileError 编译失败时抛出
    */
-  async compile(language: string, source: string): Promise<CompiledBot> {
-    const lang = this.languages.get(language);
-    if (!lang) {
-      throw new CompileError(`不支持的语言: ${language}`);
-    }
-
+  async compile(language: string, source: string): Promise<CompiledArtifact> {
     const hash = crypto.createHash('md5').update(`${language}:${source}`).digest('hex');
 
     // 检查缓存
     const cached = this.cache.get(hash);
     if (cached) {
-      cached.lastAccess = Date.now();
-      this.logger.debug(`编译缓存命中: ${hash}`);
-      return cached.compiled;
+      // 验证产物文件是否仍存在
+      const checkPath = cached.artifact.args.length > 0
+        ? cached.artifact.args[0]
+        : cached.artifact.cmd;
+      try {
+        await fs.access(checkPath);
+        cached.lastAccess = Date.now();
+        this.logger.debug(`编译缓存命中: ${hash}`);
+        return cached.artifact;
+      } catch {
+        this.cache.delete(hash);
+      }
     }
 
-    // 准备编译目录
-    const compileDir = path.join(this.cacheDir, hash);
-    await fs.mkdir(compileDir, { recursive: true });
+    // 缓存未命中，执行编译
+    const workDir = path.join(this.cacheDir, hash);
+    const input: CompileInput = { language, source, workDir };
+    const artifact = await this.compileJob.execute(input);
 
-    const sourcePath = path.join(compileDir, `main${lang.extension}`);
-    const outputPath = path.join(compileDir, 'main');
-    await fs.writeFile(sourcePath, source, 'utf-8');
-
-    // 执行编译
-    const { cmd, args } = lang.getCompileCommand(sourcePath, outputPath);
-    this.logger.debug(`编译命令: ${cmd} ${args.join(' ')}`);
-
-    const result = await this.runCompiler(cmd, args);
-
-    if (result.exitCode !== 0) {
-      throw new CompileError(
-        result.stderr || result.stdout || '编译失败',
-        result.stderr || result.stdout,
-      );
-    }
-
-    // 构建 CompiledBot
-    const runCmd = lang.getRunCommand(sourcePath, outputPath);
-    const compiled: CompiledBot = {
-      cmd: runCmd.cmd,
-      args: runCmd.args,
-      language: lang.name,
-      readonlyMounts: lang.getReadonlyMounts(),
-    };
-
-    // 更新缓存
-    this.cache.set(hash, { compiled, lastAccess: Date.now() });
+    // 写入缓存
+    this.cache.set(hash, { artifact, lastAccess: Date.now() });
     this.evictCache();
 
-    return compiled;
+    this.logger.debug(`编译完成: ${hash}`);
+    return artifact;
   }
 
-  /** 获取语言配置 */
-  getLanguage(name: string): ILanguage | undefined {
-    return this.languages.get(name);
-  }
-
-  private runCompiler(cmd: string, args: string[]): Promise<{
-    stdout: string;
-    stderr: string;
-    exitCode: number;
-  }> {
-    return new Promise((resolve, reject) => {
-      const child = spawn(cmd, args, {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      child.stdout.on('data', (data: Buffer) => {
-        stdout += data.toString();
-      });
-
-      child.stderr.on('data', (data: Buffer) => {
-        stderr += data.toString();
-      });
-
-      const timer = setTimeout(() => {
-        child.kill('SIGKILL');
-        resolve({ stdout, stderr: '编译超时', exitCode: -1 });
-      }, this.timeLimitMs);
-
-      child.on('close', (code) => {
-        clearTimeout(timer);
-        resolve({ stdout, stderr, exitCode: code ?? -1 });
-      });
-
-      child.on('error', (err) => {
-        clearTimeout(timer);
-        reject(err);
-      });
-    });
-  }
-
+  /** LRU 缓存淘汰 */
   private evictCache(): void {
     if (this.cache.size <= this.maxCacheSize) return;
 
