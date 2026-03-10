@@ -147,6 +147,26 @@ describe('LongrunStrategy', () => {
       expect(output.debug).toContain('EPIPE');
     });
 
+    it('should handle spawn error and mark process as exited', async () => {
+      jest.useFakeTimers();
+      const child = createMockChild();
+      mockSpawn.mockReturnValue(child);
+
+      // Spawn error fires asynchronously; runRound waits until timeout
+      const promise = strategy.runRound(mockBot, mockInput);
+      child.emit('error', new Error('spawn ENOENT'));
+      jest.advanceTimersByTime(1000);
+      const output = await promise;
+
+      expect(output.response).toBe('');
+      expect(output.debug).toContain('TLE');
+      jest.useRealTimers();
+
+      // Subsequent round should detect exited process immediately
+      const output2 = await strategy.runRound(mockBot, mockInput);
+      expect(output2.debug).toContain('进程已退出');
+    });
+
     it('should return error when process has already exited', async () => {
       const child = createMockChild();
       mockSpawn.mockReturnValue(child);

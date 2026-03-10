@@ -1,5 +1,5 @@
 import { DirectSandbox } from './direct.sandbox';
-import { SandboxRequest } from './sandbox.interface';
+import { SandboxRequest, MAX_OUTPUT_BYTES } from './sandbox.interface';
 
 describe('DirectSandbox', () => {
   const sandbox = new DirectSandbox();
@@ -51,6 +51,25 @@ describe('DirectSandbox', () => {
 
     const result = await sandbox.execute(req);
     expect(result.timedOut).toBe(true);
+  });
+
+  it('truncates stdout exceeding MAX_OUTPUT_BYTES', async () => {
+    // Generate output slightly over the limit
+    const overSize = MAX_OUTPUT_BYTES + 1024;
+    const req: SandboxRequest = {
+      compiled: {
+        cmd: 'sh',
+        args: ['-c', `dd if=/dev/zero bs=${overSize} count=1 2>/dev/null | tr '\\0' 'A'`],
+        language: 'test',
+        readonlyMounts: [],
+      },
+      workDir: '/tmp',
+      limit: { timeMs: 10000, memoryMb: 256 },
+    };
+
+    const result = await sandbox.execute(req);
+    expect(result.stdout.length).toBeLessThanOrEqual(MAX_OUTPUT_BYTES + 65536); // buffer margin
+    expect(result.exitCode).toBe(0);
   });
 
   it('捕获 stderr', async () => {
