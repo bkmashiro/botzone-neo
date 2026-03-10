@@ -16,8 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libnl-route-3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 编译安装 nsjail
-RUN git clone --depth 1 https://github.com/google/nsjail.git /tmp/nsjail \
+# 编译安装 nsjail（pin 到稳定版本）
+RUN git clone --depth 1 --branch 3.4 https://github.com/google/nsjail.git /tmp/nsjail \
     && cd /tmp/nsjail \
     && make -j$(nproc) \
     && cp /tmp/nsjail/nsjail /usr/bin/nsjail \
@@ -56,9 +56,10 @@ RUN mkdir -p /usr/local/include/nlohmann \
     && curl -sL https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp \
        -o /usr/local/include/nlohmann/json.hpp
 
-# 安装 wasmtime（WASM backend 用）
-RUN curl https://wasmtime.dev/install.sh -sSf | bash \
-    && cp /root/.wasmtime/bin/wasmtime /usr/local/bin/wasmtime
+# 安装 wasmtime（WASM backend 用，pin 到稳定版本）
+ARG WASMTIME_VERSION=v29.0.1
+RUN curl -sL "https://github.com/bytecodealliance/wasmtime/releases/download/${WASMTIME_VERSION}/wasmtime-${WASMTIME_VERSION}-x86_64-linux.tar.xz" \
+    | tar -xJf - --strip-components=1 -C /usr/local/bin/ "wasmtime-${WASMTIME_VERSION}-x86_64-linux/wasmtime"
 
 # 安装全局 TypeScript（Bot 编译用）
 RUN npm install -g typescript
