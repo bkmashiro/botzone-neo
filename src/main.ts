@@ -73,4 +73,7 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
-bootstrap();
+bootstrap().catch((err) => {
+  processLogger.error(`Bootstrap failed: ${err.message}`, err.stack);
+  process.exit(1);
+});
