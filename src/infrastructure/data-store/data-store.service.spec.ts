@@ -71,6 +71,38 @@ describe('DataStoreService', () => {
     });
   });
 
+  describe('onModuleInit / onModuleDestroy', () => {
+    it('should start and stop the cleanup timer', () => {
+      jest.useFakeTimers();
+      service.onModuleInit();
+      expect((service as unknown as { cleanupTimer: unknown }).cleanupTimer).toBeDefined();
+      service.onModuleDestroy();
+      jest.useRealTimers();
+    });
+
+    it('should log warning when cleanup fails in the timer', async () => {
+      jest.useFakeTimers();
+      const warnSpy = jest.spyOn(
+        (service as unknown as { logger: { warn: (...a: unknown[]) => void } }).logger,
+        'warn',
+      );
+      // Make cleanupExpiredGlobalData reject
+      jest
+        .spyOn(service, 'cleanupExpiredGlobalData')
+        .mockRejectedValueOnce(new Error('disk failure'));
+
+      service.onModuleInit();
+      jest.advanceTimersByTime(60 * 60 * 1000);
+      // Flush microtask queue so the .catch runs
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('定期清理失败'));
+      service.onModuleDestroy();
+      jest.useRealTimers();
+    });
+  });
+
   describe('safePath', () => {
     it('should sanitize special characters in botId', async () => {
       mockedFs.mkdir.mockResolvedValue(undefined);

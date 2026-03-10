@@ -143,13 +143,30 @@ describe('CompileService (infrastructure)', () => {
 
   describe('evictCache', () => {
     it('should evict oldest entries when cache exceeds max size', async () => {
-      mockSpawn.mockReturnValue(createFakeChild(0));
+      // Create a service with maxCacheSize = 2
+      const smallConfig = {
+        get: jest.fn((key: string, defaultVal: unknown) => {
+          if (key === 'COMPILE_CACHE_SIZE') return 2;
+          return defaultVal;
+        }),
+      } as unknown as ConfigService;
+      const smallService = new CompileService(
+        smallConfig,
+        { inc: jest.fn() } as never,
+        { inc: jest.fn() } as never,
+      );
 
-      // Fill cache beyond maxCacheSize (200) - this tests the eviction path
-      // We can't easily fill 201 entries, so we'll test indirectly
-      // by verifying cache works and no errors on repeated compilations
-      const result = await service.compile('cpp', 'int main() { return 42; }');
-      expect(result.language).toBe('cpp');
+      mockSpawn.mockImplementation(() => createFakeChild(0));
+
+      await smallService.compile('cpp', 'int main() { return 1; }');
+      await smallService.compile('cpp', 'int main() { return 2; }');
+      await smallService.compile('cpp', 'int main() { return 3; }');
+
+      // 3rd entry triggers eviction of the oldest (1st entry)
+      expect(mockSpawn).toHaveBeenCalledTimes(3);
+      // Cache should only hold 2 entries now; re-compiling first should trigger a new spawn
+      await smallService.compile('cpp', 'int main() { return 1; }');
+      expect(mockSpawn).toHaveBeenCalledTimes(4); // re-compiled because it was evicted
     });
   });
 
