@@ -16,8 +16,8 @@ export type RunMode = 'restart' | 'longrun';
 
 /** 回调地址 */
 export interface CallbackUrls {
-  /** 每轮进度更新回调 */
-  update: string;
+  /** 每轮进度更新回调（可选） */
+  update?: string;
   /** 对局结束回调 */
   finish: string;
 }
@@ -117,10 +117,7 @@ export class Match {
   }
 
   /** 结束对局，返回最终结果 */
-  finish(
-    scores: Record<string, number>,
-    compiles: CompileSummary[],
-  ): MatchResult {
+  finish(scores: Record<string, number>, compiles: CompileSummary[]): MatchResult {
     if (this._state === MatchState.FINISHED) {
       throw new Error('对局已结束，不能重复结束');
     }

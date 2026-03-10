@@ -256,13 +256,15 @@ export class RunMatchUseCase {
       match.addLog({ round, judgeCmd, botResponses });
       judgerHistory.requests.push(JSON.stringify(botResponses));
 
-      try {
-        await this.callbackService.update(task.callback.update, {
-          round,
-          display: judgeCmd.display,
-        });
-      } catch (updateErr) {
-        this.logger.warn(`进度回调失败 (round=${round}): ${updateErr}`);
+      if (task.callback.update) {
+        try {
+          await this.callbackService.update(task.callback.update, {
+            round,
+            display: judgeCmd.display,
+          });
+        } catch (updateErr) {
+          this.logger.warn(`进度回调失败 (round=${round}): ${updateErr}`);
+        }
       }
     }
 
