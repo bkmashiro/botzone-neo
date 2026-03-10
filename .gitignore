@@ -8,3 +8,4 @@ coverage/
 *.js.map
 *.d.ts
 !templates/**/*.d.ts
+package-lock.json
