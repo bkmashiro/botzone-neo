@@ -5,6 +5,7 @@
  */
 
 import { Controller, Post, Body, HttpCode, BadRequestException } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JudgeQueueService } from './judge-queue.service';
 import { MatchTask } from '../domain/match';
 import { BotSpec } from '../domain/bot';
@@ -18,12 +19,23 @@ import {
   MAX_TESTCASE_LENGTH,
 } from './dto/task.dto';
 
+@ApiTags('judge')
 @Controller('v1/judge')
 export class JudgeController {
   constructor(private readonly judgeQueue: JudgeQueueService) {}
 
   @Post()
   @HttpCode(202)
+  @ApiOperation({
+    summary: '提交评测任务',
+    description: '按 type 字段分发到 Botzone 对局或 OJ 评测',
+  })
+  @ApiResponse({
+    status: 202,
+    description: '任务已入队',
+    schema: { properties: { message: { type: 'string' }, jobId: { type: 'string' } } },
+  })
+  @ApiResponse({ status: 400, description: '参数校验失败' })
   async submitTask(
     @Body() body: Record<string, unknown>,
   ): Promise<{ message: string; jobId: string }> {

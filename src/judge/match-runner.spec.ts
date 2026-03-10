@@ -7,6 +7,7 @@ import { NsjailService } from '../sandbox/nsjail.service';
 import { Task, GameResult, JudgeOutput } from './types';
 import * as fs from 'fs/promises';
 import * as child_process from 'child_process';
+import { ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import { Writable } from 'stream';
 
@@ -14,16 +15,20 @@ jest.mock('child_process');
 jest.mock('fs/promises');
 
 /** 创建一个假子进程，按写入 stdin 的内容决定输出 */
-function createFakeChild(
-  exitCode: number,
-  stdout = '',
-  _stderr = '',
-) {
-  const child = new EventEmitter() as any;
+function createFakeChild(exitCode: number, stdout = '', _stderr = '') {
+  const emitter = new EventEmitter();
+  const child = emitter as EventEmitter & {
+    stdout: EventEmitter;
+    stderr: EventEmitter;
+    stdin: Writable;
+    kill: jest.Mock;
+  };
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
   child.stdin = new Writable({
-    write(_c: Buffer, _e: string, cb: () => void) { cb(); },
+    write(_c: Buffer, _e: string, cb: () => void) {
+      cb();
+    },
   });
   child.kill = jest.fn();
 
@@ -32,7 +37,7 @@ function createFakeChild(
     child.emit('close', exitCode);
   }, 0);
 
-  return child;
+  return child as unknown as ChildProcess;
 }
 
 /** 构建一个最简对局 Task（1裁判 + 1玩家） */
@@ -70,7 +75,9 @@ describe('MatchRunner', () => {
     jest.clearAllMocks();
 
     // 让 isNsjailAvailable() 返回 false，使策略降级为直接 spawn
-    mockExecSync.mockImplementation(() => { throw new Error('not found'); });
+    mockExecSync.mockImplementation(() => {
+      throw new Error('not found');
+    });
 
     // Mock fs
     (fs.mkdtemp as jest.Mock).mockResolvedValue('/tmp/botzone-test');
@@ -124,7 +131,8 @@ describe('MatchRunner', () => {
       // 编译全部成功
       compileService.compile.mockResolvedValue({
         verdict: 'OK',
-        execCmd: '/tmp/test/main', execArgs: [],
+        execCmd: '/tmp/test/main',
+        execArgs: [],
       });
 
       // 裁判输出 finish
@@ -134,7 +142,7 @@ describe('MatchRunner', () => {
         display: '玩家0获胜',
       };
       mockSpawn.mockReturnValue(
-        createFakeChild(0, JSON.stringify({ response: JSON.stringify(judgeOutput) })) as any,
+        createFakeChild(0, JSON.stringify({ response: JSON.stringify(judgeOutput) })),
       );
 
       await runner.run(makeSimpleTask());
@@ -171,7 +179,8 @@ describe('MatchRunner', () => {
     it('应该正确执行多轮对局（裁判 request → bot 回复 → 裁判 finish）', async () => {
       compileService.compile.mockResolvedValue({
         verdict: 'OK',
-        execCmd: '/tmp/test/main', execArgs: [],
+        execCmd: '/tmp/test/main',
+        execArgs: [],
       });
 
       let judgeCallCount = 0;
@@ -186,16 +195,10 @@ describe('MatchRunner', () => {
               content: { '0': '请走棋' },
               display: '等待玩家',
             };
-            return createFakeChild(
-              0,
-              JSON.stringify({ response: JSON.stringify(judgeOut) }),
-            ) as any;
+            return createFakeChild(0, JSON.stringify({ response: JSON.stringify(judgeOut) }));
           } else {
             // bot 回复
-            return createFakeChild(
-              0,
-              JSON.stringify({ response: '走A1' }),
-            ) as any;
+            return createFakeChild(0, JSON.stringify({ response: '走A1' }));
           }
         } else if (judgeCallCount === 3) {
           // 第二轮裁判：结束
@@ -204,12 +207,9 @@ describe('MatchRunner', () => {
             content: { '0': 2 },
             display: '对局结束',
           };
-          return createFakeChild(
-            0,
-            JSON.stringify({ response: JSON.stringify(judgeFinish) }),
-          ) as any;
+          return createFakeChild(0, JSON.stringify({ response: JSON.stringify(judgeFinish) }));
         }
-        return createFakeChild(0, '') as any;
+        return createFakeChild(0, '');
       });
 
       await runner.run(makeSimpleTask());
@@ -227,7 +227,8 @@ describe('MatchRunner', () => {
     it('应该在回合间正确传递 data 和 globaldata', async () => {
       compileService.compile.mockResolvedValue({
         verdict: 'OK',
-        execCmd: '/tmp/test/main', execArgs: [],
+        execCmd: '/tmp/test/main',
+        execArgs: [],
       });
 
       let callCount = 0;
@@ -240,10 +241,7 @@ describe('MatchRunner', () => {
             content: { '0': '第一轮请求' },
             display: {},
           };
-          return createFakeChild(
-            0,
-            JSON.stringify({ response: JSON.stringify(judgeOut) }),
-          ) as any;
+          return createFakeChild(0, JSON.stringify({ response: JSON.stringify(judgeOut) }));
         } else if (callCount === 2) {
           // Bot 第一轮回复，附带 data 和 globaldata
           return createFakeChild(
@@ -253,7 +251,7 @@ describe('MatchRunner', () => {
               data: '会话数据X',
               globaldata: '全局数据Y',
             }),
-          ) as any;
+          );
         } else if (callCount === 3) {
           // 裁判第二轮 → finish
           const judgeFinish: JudgeOutput = {
@@ -261,12 +259,9 @@ describe('MatchRunner', () => {
             content: { '0': 1 },
             display: '结束',
           };
-          return createFakeChild(
-            0,
-            JSON.stringify({ response: JSON.stringify(judgeFinish) }),
-          ) as any;
+          return createFakeChild(0, JSON.stringify({ response: JSON.stringify(judgeFinish) }));
         }
-        return createFakeChild(0, '') as any;
+        return createFakeChild(0, '');
       });
 
       await runner.run(makeSimpleTask());
@@ -281,7 +276,8 @@ describe('MatchRunner', () => {
     it('应该在第一回合将 initdata 传递给裁判', async () => {
       compileService.compile.mockResolvedValue({
         verdict: 'OK',
-        execCmd: '/tmp/test/main', execArgs: [],
+        execCmd: '/tmp/test/main',
+        execArgs: [],
       });
 
       // 裁判直接 finish
@@ -291,7 +287,7 @@ describe('MatchRunner', () => {
         display: '',
       };
       mockSpawn.mockReturnValue(
-        createFakeChild(0, JSON.stringify({ response: JSON.stringify(judgeOut) })) as any,
+        createFakeChild(0, JSON.stringify({ response: JSON.stringify(judgeOut) })),
       );
 
       const task = makeSimpleTask({ initdata: { board: '初始棋盘' } });
@@ -304,7 +300,8 @@ describe('MatchRunner', () => {
     it('应该支持字符串类型的 initdata', async () => {
       compileService.compile.mockResolvedValue({
         verdict: 'OK',
-        execCmd: '/tmp/test/main', execArgs: [],
+        execCmd: '/tmp/test/main',
+        execArgs: [],
       });
 
       const judgeOut: JudgeOutput = {
@@ -313,7 +310,7 @@ describe('MatchRunner', () => {
         display: '',
       };
       mockSpawn.mockReturnValue(
-        createFakeChild(0, JSON.stringify({ response: JSON.stringify(judgeOut) })) as any,
+        createFakeChild(0, JSON.stringify({ response: JSON.stringify(judgeOut) })),
       );
 
       const task = makeSimpleTask({ initdata: '自定义初始数据' });
@@ -327,7 +324,8 @@ describe('MatchRunner', () => {
     it('应该在对局结束后清理临时目录', async () => {
       compileService.compile.mockResolvedValue({
         verdict: 'OK',
-        execCmd: '/tmp/test/main', execArgs: [],
+        execCmd: '/tmp/test/main',
+        execArgs: [],
       });
 
       const judgeOut: JudgeOutput = {
@@ -336,7 +334,7 @@ describe('MatchRunner', () => {
         display: '',
       };
       mockSpawn.mockReturnValue(
-        createFakeChild(0, JSON.stringify({ response: JSON.stringify(judgeOut) })) as any,
+        createFakeChild(0, JSON.stringify({ response: JSON.stringify(judgeOut) })),
       );
 
       await runner.run(makeSimpleTask());

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { CompileService } from './compile.service';
 import * as child_process from 'child_process';
 import * as fs from 'fs/promises';
+import { ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import { Writable } from 'stream';
 
@@ -11,21 +12,22 @@ jest.mock('child_process');
 jest.mock('fs/promises');
 
 /** 创建一个假的 ChildProcess */
-function createFakeChild(
-  exitCode: number,
-  stdout = '',
-  stderr = '',
-  delay = 0,
-) {
-  const child = new EventEmitter() as any;
-  child.stdout = new EventEmitter();
-  child.stderr = new EventEmitter();
-  child.stdin = new Writable({ write(_c, _e, cb) { cb(); } });
-  child.kill = jest.fn();
+function createFakeChild(exitCode: number, stdout = '', stderr = '', delay = 0): ChildProcess {
+  const emitter = new EventEmitter();
+  const child = Object.assign(emitter, {
+    stdout: new EventEmitter(),
+    stderr: new EventEmitter(),
+    stdin: new Writable({
+      write(_c, _e, cb) {
+        cb();
+      },
+    }),
+    kill: jest.fn(),
+  }) as unknown as ChildProcess;
 
   setTimeout(() => {
-    if (stdout) child.stdout.emit('data', Buffer.from(stdout));
-    if (stderr) child.stderr.emit('data', Buffer.from(stderr));
+    if (stdout) child.stdout!.emit('data', Buffer.from(stdout));
+    if (stderr) child.stderr!.emit('data', Buffer.from(stderr));
     child.emit('close', exitCode);
   }, delay);
 
@@ -65,7 +67,7 @@ describe('CompileService', () => {
 
   describe('LRU 缓存', () => {
     it('应该在首次编译时缓存未命中并执行编译', async () => {
-      mockSpawn.mockReturnValue(createFakeChild(0) as any);
+      mockSpawn.mockReturnValue(createFakeChild(0));
 
       const result = await service.compile('cpp', 'int main() {}');
 
@@ -75,7 +77,7 @@ describe('CompileService', () => {
     });
 
     it('应该在相同代码二次编译时命中缓存', async () => {
-      mockSpawn.mockReturnValue(createFakeChild(0) as any);
+      mockSpawn.mockReturnValue(createFakeChild(0));
 
       // 首次编译
       await service.compile('cpp', 'int main() { return 0; }');
@@ -89,14 +91,14 @@ describe('CompileService', () => {
     });
 
     it('应该在缓存文件不存在时重新编译', async () => {
-      mockSpawn.mockReturnValue(createFakeChild(0) as any);
+      mockSpawn.mockReturnValue(createFakeChild(0));
 
       // 首次编译
       await service.compile('cpp', 'int main() { return 1; }');
 
       // 模拟缓存文件被删除
       (fs.access as jest.Mock).mockRejectedValueOnce(new Error('ENOENT'));
-      mockSpawn.mockReturnValue(createFakeChild(0) as any);
+      mockSpawn.mockReturnValue(createFakeChild(0));
 
       const result = await service.compile('cpp', 'int main() { return 1; }');
       expect(result.verdict).toBe('OK');
@@ -107,7 +109,7 @@ describe('CompileService', () => {
 
   describe('编译命令生成', () => {
     it('应该为 C++ 生成正确的编译命令（g++ -O2 -std=c++17）', async () => {
-      mockSpawn.mockReturnValue(createFakeChild(0) as any);
+      mockSpawn.mockReturnValue(createFakeChild(0));
 
       await service.compile('cpp', '#include <iostream>\nint main() {}');
 
@@ -119,7 +121,7 @@ describe('CompileService', () => {
     });
 
     it('应该为 Python 生成语法检查命令（python3 -m py_compile）', async () => {
-      mockSpawn.mockReturnValue(createFakeChild(0) as any);
+      mockSpawn.mockReturnValue(createFakeChild(0));
 
       await service.compile('python', 'print("hello")');
 
@@ -130,7 +132,7 @@ describe('CompileService', () => {
     });
 
     it('应该为 TypeScript 生成编译命令（tsc --strict）', async () => {
-      mockSpawn.mockReturnValue(createFakeChild(0) as any);
+      mockSpawn.mockReturnValue(createFakeChild(0));
 
       await service.compile('typescript', 'const x: number = 1;');
 
@@ -144,9 +146,7 @@ describe('CompileService', () => {
 
   describe('编译失败处理', () => {
     it('应该在编译失败时返回 CE verdict', async () => {
-      mockSpawn.mockReturnValue(
-        createFakeChild(1, '', 'error: expected ;') as any,
-      );
+      mockSpawn.mockReturnValue(createFakeChild(1, '', 'error: expected ;'));
 
       const result = await service.compile('cpp', 'invalid code');
 
@@ -162,7 +162,7 @@ describe('CompileService', () => {
     });
 
     it('应该在编译输出为空时返回默认错误信息', async () => {
-      mockSpawn.mockReturnValue(createFakeChild(1, '', '') as any);
+      mockSpawn.mockReturnValue(createFakeChild(1, '', ''));
 
       const result = await service.compile('cpp', 'bad');
 

@@ -1,8 +1,10 @@
 import { RestartStrategy } from './restart.strategy';
 import { BotContext, BotInput, BotOutput } from '../judge/types';
 import * as child_process from 'child_process';
+import { ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import { Writable } from 'stream';
+import { NsjailService } from '../sandbox/nsjail.service';
 
 jest.mock('child_process');
 
@@ -39,7 +41,14 @@ function createFakeChild(
   stderr = '',
   opts: { delay?: number; hang?: boolean } = {},
 ) {
-  const child = new EventEmitter() as any;
+  const emitter = new EventEmitter();
+  const child = emitter as EventEmitter & {
+    stdout: EventEmitter;
+    stderr: EventEmitter;
+    stdin: Writable;
+    kill: jest.Mock;
+    _getStdinData: () => string;
+  };
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
 
@@ -63,7 +72,7 @@ function createFakeChild(
     }, opts.delay ?? 0);
   }
 
-  return child;
+  return child as unknown as ChildProcess & { _getStdinData: () => string; kill: jest.Mock };
 }
 
 describe('RestartStrategy', () => {
@@ -88,7 +97,7 @@ describe('RestartStrategy', () => {
 
       const outputJson = JSON.stringify({ response: 'ok' });
       const fakeChild = createFakeChild(0, outputJson);
-      mockSpawn.mockReturnValue(fakeChild as any);
+      mockSpawn.mockReturnValue(fakeChild);
 
       await strategy.runRound(makeBotCtx(), input);
 
@@ -104,12 +113,9 @@ describe('RestartStrategy', () => {
 
     it('应该使用 botCtx.execCmd/execArgs 启动进程', async () => {
       const outputJson = JSON.stringify({ response: 'test' });
-      mockSpawn.mockReturnValue(createFakeChild(0, outputJson) as any);
+      mockSpawn.mockReturnValue(createFakeChild(0, outputJson));
 
-      await strategy.runRound(
-        makeBotCtx({ execCmd: '/my/bot', execArgs: [] }),
-        makeBotInput(),
-      );
+      await strategy.runRound(makeBotCtx({ execCmd: '/my/bot', execArgs: [] }), makeBotInput());
 
       expect(mockSpawn).toHaveBeenCalledWith(
         '/my/bot',
@@ -127,9 +133,7 @@ describe('RestartStrategy', () => {
         data: '新数据',
         globaldata: '新全局',
       };
-      mockSpawn.mockReturnValue(
-        createFakeChild(0, JSON.stringify(botOutput)) as any,
-      );
+      mockSpawn.mockReturnValue(createFakeChild(0, JSON.stringify(botOutput)));
 
       const result = await strategy.runRound(makeBotCtx(), makeBotInput());
 
@@ -140,9 +144,7 @@ describe('RestartStrategy', () => {
     });
 
     it('应该在输出不是 JSON 时将整行作为 response', async () => {
-      mockSpawn.mockReturnValue(
-        createFakeChild(0, 'plain text response') as any,
-      );
+      mockSpawn.mockReturnValue(createFakeChild(0, 'plain text response'));
 
       const result = await strategy.runRound(makeBotCtx(), makeBotInput());
 
@@ -152,7 +154,7 @@ describe('RestartStrategy', () => {
     it('应该只解析第一行输出', async () => {
       const line1 = JSON.stringify({ response: '第一行' });
       const multiLine = `${line1}\n这是第二行\n这是第三行`;
-      mockSpawn.mockReturnValue(createFakeChild(0, multiLine) as any);
+      mockSpawn.mockReturnValue(createFakeChild(0, multiLine));
 
       const result = await strategy.runRound(makeBotCtx(), makeBotInput());
 
@@ -164,7 +166,7 @@ describe('RestartStrategy', () => {
     it('应该在超过时间限制时返回 TLE 信息', async () => {
       // 创建一个会一直挂起的进程
       const fakeChild = createFakeChild(0, '', '', { hang: true });
-      mockSpawn.mockReturnValue(fakeChild as any);
+      mockSpawn.mockReturnValue(fakeChild);
 
       const ctx = makeBotCtx({ limit: { time: 50, memory: 256 } });
 
@@ -178,9 +180,7 @@ describe('RestartStrategy', () => {
 
   describe('异常退出处理', () => {
     it('应该在进程非零退出时返回 stderr 作为 debug', async () => {
-      mockSpawn.mockReturnValue(
-        createFakeChild(1, '', '段错误 (core dumped)') as any,
-      );
+      mockSpawn.mockReturnValue(createFakeChild(1, '', '段错误 (core dumped)'));
 
       const result = await strategy.runRound(makeBotCtx(), makeBotInput());
 
@@ -189,7 +189,7 @@ describe('RestartStrategy', () => {
     });
 
     it('应该在 stderr 为空时返回退出码信息', async () => {
-      mockSpawn.mockReturnValue(createFakeChild(139, '', '') as any);
+      mockSpawn.mockReturnValue(createFakeChild(139, '', ''));
 
       const result = await strategy.runRound(makeBotCtx(), makeBotInput());
 
@@ -201,7 +201,7 @@ describe('RestartStrategy', () => {
   describe('spawn 错误处理', () => {
     it('应该在 spawn error 时返回 SE verdict', async () => {
       const fakeChild = createFakeChild(0, '', '', { hang: true });
-      mockSpawn.mockReturnValue(fakeChild as any);
+      mockSpawn.mockReturnValue(fakeChild);
 
       const promise = strategy.runRound(makeBotCtx(), makeBotInput());
 
@@ -230,7 +230,7 @@ describe('RestartStrategy', () => {
       const cp = jest.requireActual('child_process');
       jest.spyOn(cp, 'execSync').mockReturnValue(Buffer.from('/usr/bin/nsjail'));
 
-      const nsjailStrategy = new RestartStrategy(mockNsjail as any);
+      const nsjailStrategy = new RestartStrategy(mockNsjail as unknown as NsjailService);
 
       const result = await nsjailStrategy.runRound(makeBotCtx(), makeBotInput());
       expect(result.response).toBe('nsjail-ok');
@@ -249,7 +249,7 @@ describe('RestartStrategy', () => {
       const cp = jest.requireActual('child_process');
       jest.spyOn(cp, 'execSync').mockReturnValue(Buffer.from('/usr/bin/nsjail'));
 
-      const nsjailStrategy = new RestartStrategy(mockNsjail as any);
+      const nsjailStrategy = new RestartStrategy(mockNsjail as unknown as NsjailService);
 
       const result = await nsjailStrategy.runRound(makeBotCtx(), makeBotInput());
       expect(result.verdict).toBe('TLE');
@@ -269,7 +269,7 @@ describe('RestartStrategy', () => {
       const cp = jest.requireActual('child_process');
       jest.spyOn(cp, 'execSync').mockReturnValue(Buffer.from('/usr/bin/nsjail'));
 
-      const nsjailStrategy = new RestartStrategy(mockNsjail as any);
+      const nsjailStrategy = new RestartStrategy(mockNsjail as unknown as NsjailService);
 
       const result = await nsjailStrategy.runRound(makeBotCtx(), makeBotInput());
       expect(result.verdict).toBe('RE');

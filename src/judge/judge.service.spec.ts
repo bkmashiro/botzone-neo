@@ -13,11 +13,11 @@ describe('JudgeService', () => {
   beforeEach(() => {
     mockQueue = {
       add: jest.fn().mockResolvedValue({ id: 42 }),
-    } as any;
+    } as unknown as jest.Mocked<Queue>;
 
     mockMatchRunner = {
       run: jest.fn().mockResolvedValue(undefined),
-    } as any;
+    } as unknown as jest.Mocked<MatchRunner>;
 
     mockConfigService = {
       get: jest.fn((key: string, defaultVal: unknown) => {
@@ -25,7 +25,7 @@ describe('JudgeService', () => {
         if (key === 'JUDGE_CAPABILITY') return 8;
         return defaultVal;
       }),
-    } as any;
+    } as unknown as jest.Mocked<ConfigService>;
 
     service = new JudgeService(mockQueue, mockMatchRunner, mockConfigService);
   });

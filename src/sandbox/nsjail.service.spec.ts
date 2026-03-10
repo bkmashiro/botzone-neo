@@ -7,16 +7,24 @@ jest.mock('./nsjail.config', () => ({
   buildNsjailArgs: jest.fn().mockReturnValue(['--mode', 'o', '--', '/bin/test']),
 }));
 
+interface FakeProcess extends EventEmitter {
+  stdout: EventEmitter;
+  stderr: EventEmitter;
+  stdin: { write: jest.Mock; end: jest.Mock };
+  kill: jest.Mock;
+}
+
 describe('NsjailService', () => {
   let service: NsjailService;
 
-  function createFakeProcess() {
-    const proc = new EventEmitter() as any;
-    proc.stdout = new EventEmitter();
-    proc.stderr = new EventEmitter();
-    proc.stdin = { write: jest.fn(), end: jest.fn() };
-    proc.kill = jest.fn();
-    return proc;
+  function createFakeProcess(): FakeProcess {
+    const emitter = new EventEmitter();
+    return Object.assign(emitter, {
+      stdout: new EventEmitter(),
+      stderr: new EventEmitter(),
+      stdin: { write: jest.fn(), end: jest.fn() },
+      kill: jest.fn(),
+    }) as FakeProcess;
   }
 
   beforeEach(() => {

@@ -42,8 +42,12 @@ export class DataStoreService {
     this.sessions.set(id, map);
     return {
       getData: (botId: string) => map.get(botId) ?? '',
-      setData: (botId: string, data: string) => { map.set(botId, data); },
-      clear: () => { this.sessions.delete(id); },
+      setData: (botId: string, data: string) => {
+        map.set(botId, data);
+      },
+      clear: () => {
+        this.sessions.delete(id);
+      },
     };
   }
 
@@ -57,10 +61,20 @@ export class DataStoreService {
     this.dataMap.set(botId, data);
   }
 
+  /** 获取安全的文件路径（防止路径遍历） */
+  private safePath(botId: string): string {
+    const sanitized = botId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filePath = path.resolve(this.baseDir, `${sanitized}.json`);
+    if (!filePath.startsWith(path.resolve(this.baseDir))) {
+      throw new Error(`非法 botId: ${botId}`);
+    }
+    return filePath;
+  }
+
   /** 获取全局持久化数据（过期返回空） */
   async getGlobalData(botId: string): Promise<string> {
     try {
-      const filePath = path.join(this.baseDir, `${botId}.json`);
+      const filePath = this.safePath(botId);
       const stat = await fs.stat(filePath);
       if (Date.now() - stat.mtimeMs > GLOBALDATA_TTL_MS) {
         await fs.unlink(filePath).catch(() => {});
@@ -76,7 +90,7 @@ export class DataStoreService {
   /** 设置全局持久化数据 */
   async setGlobalData(botId: string, data: string): Promise<void> {
     await fs.mkdir(this.baseDir, { recursive: true });
-    const filePath = path.join(this.baseDir, `${botId}.json`);
+    const filePath = this.safePath(botId);
     await fs.writeFile(filePath, data, 'utf-8');
     this.logger.debug(`全局数据已保存: ${botId}`);
   }

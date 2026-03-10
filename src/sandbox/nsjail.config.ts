@@ -18,34 +18,61 @@ export interface NsjailOptions {
   readonlyMounts?: string[];
 }
 
+/** 安全上限 */
+const MAX_TIME_LIMIT_SEC = 300;
+const MAX_MEMORY_LIMIT_MB = 4096;
+
+/** 将数值钳制到安全范围内，防止 Infinity/NaN/负数 */
+function clampLimit(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value) || value < min) return min;
+  return Math.min(value, max);
+}
+
 /**
  * 构建 nsjail 命令行参数
  */
 export function buildNsjailArgs(opts: NsjailOptions): string[] {
+  const timeLimit = clampLimit(opts.timeLimit, 1, MAX_TIME_LIMIT_SEC);
+  const memoryLimit = clampLimit(opts.memoryLimit, 16, MAX_MEMORY_LIMIT_MB);
+
   const args: string[] = [
-    '--mode', 'o',                        // 一次性模式
-    '--time_limit', String(opts.timeLimit),
-    '--rlimit_as', String(opts.memoryLimit),
-    '--rlimit_cpu', String(opts.timeLimit),
-    '--rlimit_fsize', '64',              // 输出文件大小限制（MB）
-    '--rlimit_nofile', '64',             // 文件描述符数量限制
+    '--mode',
+    'o', // 一次性模式
+    '--time_limit',
+    String(timeLimit),
+    '--rlimit_as',
+    String(memoryLimit),
+    '--rlimit_cpu',
+    String(timeLimit),
+    '--rlimit_fsize',
+    '64', // 输出文件大小限制（MB）
+    '--rlimit_nofile',
+    '64', // 文件描述符数量限制
 
     // 基础只读挂载
-    '--mount', '/bin:/bin:ro',
-    '--mount', '/lib:/lib:ro',
-    '--mount', '/lib64:/lib64:ro',
-    '--mount', '/usr:/usr:ro',
+    '--mount',
+    '/bin:/bin:ro',
+    '--mount',
+    '/lib:/lib:ro',
+    '--mount',
+    '/lib64:/lib64:ro',
+    '--mount',
+    '/usr:/usr:ro',
 
     // 工作目录（可写）
-    '--mount', `${opts.workDir}:/workspace:rw`,
-    '--cwd', '/workspace',
+    '--mount',
+    `${opts.workDir}:/workspace:rw`,
+    '--cwd',
+    '/workspace',
 
     // 网络隔离
     '--disable_clone_newnet',
 
     // 用户映射
-    '--uid_mapping', '0:65534:1',
-    '--gid_mapping', '0:65534:1',
+    '--uid_mapping',
+    '0:65534:1',
+    '--gid_mapping',
+    '0:65534:1',
   ];
 
   // 额外只读挂载

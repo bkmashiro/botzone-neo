@@ -1,20 +1,28 @@
 import { NsjailSandbox } from './nsjail.sandbox';
 import * as child_process from 'child_process';
 import { EventEmitter } from 'events';
-import { SandboxRequest } from './sandbox.interface';
+import type { SandboxRequest } from './sandbox.interface';
 
 jest.mock('child_process');
+
+interface FakeProcess extends EventEmitter {
+  stdout: EventEmitter;
+  stderr: EventEmitter;
+  stdin: { write: jest.Mock; end: jest.Mock };
+  kill: jest.Mock;
+}
 
 describe('NsjailSandbox', () => {
   let sandbox: NsjailSandbox;
 
-  function createFakeProcess() {
-    const proc = new EventEmitter() as any;
-    proc.stdout = new EventEmitter();
-    proc.stderr = new EventEmitter();
-    proc.stdin = { write: jest.fn(), end: jest.fn() };
-    proc.kill = jest.fn();
-    return proc;
+  function createFakeProcess(): FakeProcess {
+    const emitter = new EventEmitter();
+    return Object.assign(emitter, {
+      stdout: new EventEmitter(),
+      stderr: new EventEmitter(),
+      stdin: { write: jest.fn(), end: jest.fn() },
+      kill: jest.fn(),
+    }) as FakeProcess;
   }
 
   function makeRequest(overrides?: Partial<SandboxRequest>): SandboxRequest {
@@ -60,11 +68,9 @@ describe('NsjailSandbox', () => {
     });
 
     // Verify spawn was called with nsjail path
-    expect(child_process.spawn).toHaveBeenCalledWith(
-      '/usr/bin/nsjail',
-      expect.any(Array),
-      { stdio: ['pipe', 'pipe', 'pipe'] },
-    );
+    expect(child_process.spawn).toHaveBeenCalledWith('/usr/bin/nsjail', expect.any(Array), {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
   });
 
   it('should include readonly mounts from compiled bot', () => {
@@ -93,7 +99,7 @@ describe('NsjailSandbox', () => {
 
   it('should compute time limit from milliseconds', () => {
     const fakeProc = createFakeProcess();
-    const spawnMock = (child_process.spawn as jest.Mock);
+    const spawnMock = child_process.spawn as jest.Mock;
     spawnMock.mockReturnValue(fakeProc);
 
     sandbox.execute(makeRequest({ limit: { timeMs: 1500, memoryMb: 128 } }));
