@@ -1,0 +1,73 @@
+version: "3.8"
+
+services:
+  judger:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: botzone-judger
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3001}:3001"
+    environment:
+      - PORT=3001
+      - DB_HOST=mariadb
+      - DB_PORT=3306
+      - DB_DATABASE=${DB_DATABASE:-botzone}
+      - DB_USERNAME=${DB_USERNAME:-botzone}
+      - DB_PASSWORD=${DB_PASSWORD:-botzonepass}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JUDGE_CAPABILITY=${JUDGE_CAPABILITY:-15}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - botzone-internal
+    # nsjail 需要特权模式
+    privileged: true
+
+  mariadb:
+    image: mariadb:10.11
+    container_name: botzone-mariadb
+    restart: unless-stopped
+    environment:
+      - MARIADB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-rootpass}
+      - MARIADB_DATABASE=${DB_DATABASE:-botzone}
+      - MARIADB_USER=${DB_USERNAME:-botzone}
+      - MARIADB_PASSWORD=${DB_PASSWORD:-botzonepass}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - botzone-internal
+
+  redis:
+    image: redis:7-alpine
+    container_name: botzone-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - botzone-internal
+
+volumes:
+  mariadb-data:
+  redis-data:
+
+networks:
+  botzone-internal:
+    driver: bridge
+    internal: true

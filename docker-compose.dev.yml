@@ -1,0 +1,27 @@
+version: "3.8"
+
+# 开发环境覆盖配置
+# 使用方式: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  judger:
+    build:
+      dockerfile: docker/Dockerfile.dev
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run start:dev
+    environment:
+      - NODE_ENV=development
+
+  mariadb:
+    ports:
+      - "3306:3306"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+networks:
+  botzone-internal:
+    internal: false  # 开发环境允许外部访问

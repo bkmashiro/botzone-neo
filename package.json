@@ -1,0 +1,52 @@
+{
+  "name": "botzone-neo",
+  "version": "1.0.0",
+  "description": "Botzone Neo — NestJS Judger 评测服务",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "nest build",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:debug": "nest start --debug --watch",
+    "start:prod": "node dist/main",
+    "test": "echo \"TODO: 配置测试框架\" && exit 0",
+    "lint": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bkmashiro/botzone-neo.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/bkmashiro/botzone-neo/issues"
+  },
+  "homepage": "https://github.com/bkmashiro/botzone-neo#readme",
+  "dependencies": {
+    "@nestjs/bull": "^11.0.4",
+    "@nestjs/common": "^11.1.16",
+    "@nestjs/config": "^4.0.3",
+    "@nestjs/core": "^11.1.16",
+    "@nestjs/platform-express": "^11.1.16",
+    "@nestjs/typeorm": "^11.0.0",
+    "bull": "^4.16.5",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "mysql2": "^3.19.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "typeorm": "^0.3.28"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.16",
+    "@nestjs/schematics": "^11.0.9",
+    "@nestjs/testing": "^11.1.16",
+    "@types/bull": "^3.15.9",
+    "@types/node": "^25.4.0",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.9.3"
+  }
+}

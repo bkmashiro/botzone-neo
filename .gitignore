@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.cache/
+.data/
+.env
+.env.local
+*.js.map
+*.d.ts
+!templates/**/*.d.ts

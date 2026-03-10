@@ -1,0 +1,37 @@
+# ============================================================
+# 开发环境 Dockerfile（含完整编译工具链）
+# ============================================================
+FROM node:20-bookworm
+
+WORKDIR /app
+
+# 安装编译器和 nsjail 依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    g++ \
+    python3 \
+    git \
+    pkg-config \
+    libprotobuf-dev \
+    protobuf-compiler \
+    libnl-3-dev \
+    libnl-route-3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# 编译安装 nsjail
+RUN git clone --depth 1 https://github.com/google/nsjail.git /tmp/nsjail \
+    && cd /tmp/nsjail \
+    && make -j$(nproc) \
+    && cp /tmp/nsjail/nsjail /usr/bin/nsjail \
+    && rm -rf /tmp/nsjail
+
+# 安装 nlohmann/json
+RUN mkdir -p /usr/local/include/nlohmann \
+    && curl -sL https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp \
+       -o /usr/local/include/nlohmann/json.hpp
+
+# 安装全局 TypeScript
+RUN npm install -g typescript
+
+# 挂载源码（通过 docker-compose volumes）
+CMD ["npm", "run", "start:dev"]
