@@ -16,7 +16,7 @@ import { Verdict, CompileError } from '../domain/verdict';
 
 import { CompileService } from '../infrastructure/compile/compile.service';
 import { CallbackService } from '../infrastructure/callback/callback.service';
-import { DataStoreService } from '../infrastructure/data-store/data-store.service';
+import { DataStoreService, SessionScope } from '../infrastructure/data-store/data-store.service';
 import { ISandbox, SANDBOX_TOKEN } from '../infrastructure/sandbox/sandbox.interface';
 
 import { IBotRunStrategy } from '../strategies/bot-run-strategy.interface';
@@ -41,6 +41,7 @@ export class RunMatchUseCase {
     const bots = new Map<string, BotRuntime>();
     const histories = new Map<string, { requests: string[]; responses: string[] }>();
     const compiles: CompileSummary[] = [];
+    const session = this.dataStoreService.createSession();
 
     try {
       // ── 阶段1: 编译所有代码 ──
@@ -80,7 +81,7 @@ export class RunMatchUseCase {
           judgerHistory.requests.push(initdata);
         }
 
-        const judgerInput = await this.buildBotInput(judgerBot, judgerHistory);
+        const judgerInput = await this.buildBotInput(judgerBot, judgerHistory, session);
         const judgerOutput = await strategy.runRound(judgerBot, judgerInput);
         await strategy.afterRound(judgerBot);
 
@@ -89,7 +90,7 @@ export class RunMatchUseCase {
           break;
         }
 
-        await this.updatePersistentData(judgerBot.id, judgerOutput);
+        await this.updatePersistentData(judgerBot.id, judgerOutput, session);
         judgerHistory.responses.push(judgerOutput.response);
 
         // 解析裁判输出
@@ -119,11 +120,11 @@ export class RunMatchUseCase {
           const history = histories.get(botId)!;
           history.requests.push(String(request));
 
-          const botInput = await this.buildBotInput(bot, history);
+          const botInput = await this.buildBotInput(bot, history, session);
           const output: BotOutput = await strategy.runRound(bot, botInput);
           await strategy.afterRound(bot);
 
-          await this.updatePersistentData(botId, output);
+          await this.updatePersistentData(botId, output, session);
           history.responses.push(output.response);
           botResponses[botId] = output.response;
         }
@@ -152,7 +153,7 @@ export class RunMatchUseCase {
       for (const bot of bots.values()) {
         await strategy.cleanup(bot);
       }
-      this.dataStoreService.clearSessionData();
+      session.clear();
       await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
     }
   }
@@ -186,20 +187,21 @@ export class RunMatchUseCase {
   private async buildBotInput(
     bot: BotRuntime,
     history: { requests: string[]; responses: string[] },
+    session: SessionScope,
   ): Promise<BotInput> {
     return {
       requests: history.requests,
       responses: history.responses,
-      data: await this.dataStoreService.getData(bot.id),
+      data: session.getData(bot.id),
       globaldata: await this.dataStoreService.getGlobalData(bot.id),
       time_limit: bot.limit.timeMs / 1000,
       memory_limit: bot.limit.memoryMb,
     };
   }
 
-  private async updatePersistentData(botId: string, output: BotOutput): Promise<void> {
+  private async updatePersistentData(botId: string, output: BotOutput, session: SessionScope): Promise<void> {
     if (output.data !== undefined) {
-      await this.dataStoreService.setData(botId, output.data);
+      session.setData(botId, output.data);
     }
     if (output.globaldata !== undefined) {
       await this.dataStoreService.setGlobalData(botId, output.globaldata);

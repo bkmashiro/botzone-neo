@@ -1,15 +1,23 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
 /** globaldata 文件过期时间（默认 7 天） */
 const GLOBALDATA_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+/** 会话级数据作用域（每个对局独立，并发安全） */
+export interface SessionScope {
+  getData(botId: string): string;
+  setData(botId: string, data: string): void;
+  clear(): void;
+}
+
 /**
  * 数据持久化服务
  *
  * 管理 Bot 的 data（本局数据）和 globaldata（全局数据）。
- * - data：内存存储，仅在对局期间有效
+ * - data：通过 SessionScope 隔离，每个对局独立
  * - globaldata：文件存储，跨对局持久化，7 天 TTL 自动清理
  */
 @Injectable()
@@ -17,11 +25,26 @@ export class DataStoreService {
   private readonly logger = new Logger(DataStoreService.name);
   private readonly baseDir: string;
 
-  /** 内存缓存：本局 data（仅在对局期间有效） */
+  /** 所有活跃会话 */
+  private readonly sessions: Map<string, Map<string, string>> = new Map();
+
+  /** 向后兼容：全局 dataMap（已废弃，请使用 createSession） */
   private readonly dataMap: Map<string, string> = new Map();
 
   constructor() {
     this.baseDir = path.join(process.cwd(), '.data', 'globaldata');
+  }
+
+  /** 创建对局级会话作用域（并发安全） */
+  createSession(): SessionScope {
+    const id = crypto.randomUUID();
+    const map = new Map<string, string>();
+    this.sessions.set(id, map);
+    return {
+      getData: (botId: string) => map.get(botId) ?? '',
+      setData: (botId: string, data: string) => { map.set(botId, data); },
+      clear: () => { this.sessions.delete(id); },
+    };
   }
 
   /** 获取本局持久化数据 */
