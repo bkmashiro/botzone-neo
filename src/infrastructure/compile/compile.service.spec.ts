@@ -2,22 +2,25 @@ import { CompileService } from './compile.service';
 import { ConfigService } from '@nestjs/config';
 import { CompileError } from '../../domain/verdict';
 import * as child_process from 'child_process';
+import { ChildProcess } from 'child_process';
 import * as fs from 'fs/promises';
 import { EventEmitter } from 'events';
 
 jest.mock('child_process');
 jest.mock('fs/promises');
 
-function createFakeChild(exitCode: number, stdout = '', stderr = '', delay = 0) {
-  const child = new EventEmitter() as any;
-  child.stdout = new EventEmitter();
-  child.stderr = new EventEmitter();
-  child.stdin = { write: jest.fn(), end: jest.fn() };
-  child.kill = jest.fn();
+function createFakeChild(exitCode: number, stdout = '', stderr = '', delay = 0): ChildProcess {
+  const emitter = new EventEmitter();
+  const child = Object.assign(emitter, {
+    stdout: new EventEmitter(),
+    stderr: new EventEmitter(),
+    stdin: { write: jest.fn(), end: jest.fn() },
+    kill: jest.fn(),
+  }) as unknown as ChildProcess;
 
   setTimeout(() => {
-    if (stdout) child.stdout.emit('data', Buffer.from(stdout));
-    if (stderr) child.stderr.emit('data', Buffer.from(stderr));
+    if (stdout) child.stdout!.emit('data', Buffer.from(stdout));
+    if (stderr) child.stderr!.emit('data', Buffer.from(stderr));
     child.emit('close', exitCode);
   }, delay);
 
@@ -39,12 +42,13 @@ describe('CompileService (infrastructure)', () => {
       get: jest.fn((_key: string, defaultVal: unknown) => defaultVal),
     } as unknown as ConfigService;
 
-    service = new CompileService(configService);
+    const mockCounter = { inc: jest.fn() };
+    service = new CompileService(configService, mockCounter as never, mockCounter as never);
   });
 
   describe('compile', () => {
     it('should return CompiledBot on successful compilation', async () => {
-      mockSpawn.mockReturnValue(createFakeChild(0) as any);
+      mockSpawn.mockReturnValue(createFakeChild(0));
 
       const result = await service.compile('cpp', 'int main() {}');
 
@@ -57,21 +61,18 @@ describe('CompileService (infrastructure)', () => {
     });
 
     it('should throw CompileError for unsupported language', async () => {
-      await expect(service.compile('rust', 'fn main() {}'))
-        .rejects.toThrow(CompileError);
-      await expect(service.compile('rust', 'fn main() {}'))
-        .rejects.toThrow('不支持的语言');
+      await expect(service.compile('rust', 'fn main() {}')).rejects.toThrow(CompileError);
+      await expect(service.compile('rust', 'fn main() {}')).rejects.toThrow('不支持的语言');
     });
 
     it('should throw CompileError on compile failure', async () => {
-      mockSpawn.mockReturnValue(createFakeChild(1, '', 'error: syntax error') as any);
+      mockSpawn.mockReturnValue(createFakeChild(1, '', 'error: syntax error'));
 
-      await expect(service.compile('cpp', 'bad code'))
-        .rejects.toThrow(CompileError);
+      await expect(service.compile('cpp', 'bad code')).rejects.toThrow(CompileError);
     });
 
     it('should throw CompileError with stderr content as message', async () => {
-      mockSpawn.mockReturnValue(createFakeChild(1, '', 'specific error msg') as any);
+      mockSpawn.mockReturnValue(createFakeChild(1, '', 'specific error msg'));
 
       try {
         await service.compile('cpp', 'bad');
@@ -83,7 +84,7 @@ describe('CompileService (infrastructure)', () => {
     });
 
     it('should throw CompileError with default message when stderr is empty', async () => {
-      mockSpawn.mockReturnValue(createFakeChild(1, '', '') as any);
+      mockSpawn.mockReturnValue(createFakeChild(1, '', ''));
 
       try {
         await service.compile('cpp', 'bad');
@@ -95,7 +96,7 @@ describe('CompileService (infrastructure)', () => {
     });
 
     it('should cache successful compilations', async () => {
-      mockSpawn.mockReturnValue(createFakeChild(0) as any);
+      mockSpawn.mockReturnValue(createFakeChild(0));
 
       const result1 = await service.compile('cpp', 'int main() { return 0; }');
       const result2 = await service.compile('cpp', 'int main() { return 0; }');
@@ -105,9 +106,7 @@ describe('CompileService (infrastructure)', () => {
     });
 
     it('should compile different sources separately', async () => {
-      mockSpawn
-        .mockReturnValueOnce(createFakeChild(0) as any)
-        .mockReturnValueOnce(createFakeChild(0) as any);
+      mockSpawn.mockReturnValueOnce(createFakeChild(0)).mockReturnValueOnce(createFakeChild(0));
 
       await service.compile('cpp', 'int main() { return 0; }');
       await service.compile('cpp', 'int main() { return 1; }');
@@ -116,14 +115,14 @@ describe('CompileService (infrastructure)', () => {
     });
 
     it('should support Python compilation', async () => {
-      mockSpawn.mockReturnValueOnce(createFakeChild(0) as any);
+      mockSpawn.mockReturnValueOnce(createFakeChild(0));
 
       const result = await service.compile('python', 'print("hello")');
       expect(result.language).toBe('python');
     });
 
     it('should support TypeScript compilation', async () => {
-      mockSpawn.mockReturnValueOnce(createFakeChild(0) as any);
+      mockSpawn.mockReturnValueOnce(createFakeChild(0));
 
       const result = await service.compile('typescript', 'const x = 1;');
       expect(result.language).toBe('typescript');
@@ -144,7 +143,7 @@ describe('CompileService (infrastructure)', () => {
 
   describe('evictCache', () => {
     it('should evict oldest entries when cache exceeds max size', async () => {
-      mockSpawn.mockReturnValue(createFakeChild(0) as any);
+      mockSpawn.mockReturnValue(createFakeChild(0));
 
       // Fill cache beyond maxCacheSize (200) - this tests the eviction path
       // We can't easily fill 201 entries, so we'll test indirectly

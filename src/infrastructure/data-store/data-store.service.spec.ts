@@ -1,5 +1,6 @@
 import { DataStoreService } from './data-store.service';
 import * as fs from 'fs/promises';
+import type { Stats } from 'fs';
 import * as path from 'path';
 
 jest.mock('fs/promises');
@@ -45,7 +46,7 @@ describe('DataStoreService', () => {
     it('should return file content when file exists and is fresh', async () => {
       mockedFs.stat.mockResolvedValue({
         mtimeMs: Date.now() - 1000, // 1 second ago
-      } as any);
+      } as unknown as Stats);
       mockedFs.readFile.mockResolvedValue('global-data-content');
 
       const result = await service.getGlobalData('bot-1');
@@ -55,7 +56,7 @@ describe('DataStoreService', () => {
     it('should return empty string and delete file when expired', async () => {
       mockedFs.stat.mockResolvedValue({
         mtimeMs: Date.now() - 8 * 24 * 60 * 60 * 1000, // 8 days ago
-      } as any);
+      } as unknown as Stats);
       mockedFs.unlink.mockResolvedValue(undefined);
 
       const result = await service.getGlobalData('bot-1');
@@ -73,7 +74,7 @@ describe('DataStoreService', () => {
     it('should handle unlink failure gracefully for expired files', async () => {
       mockedFs.stat.mockResolvedValue({
         mtimeMs: Date.now() - 8 * 24 * 60 * 60 * 1000,
-      } as any);
+      } as unknown as Stats);
       mockedFs.unlink.mockRejectedValue(new Error('EPERM'));
 
       const result = await service.getGlobalData('bot-1');
@@ -106,15 +107,15 @@ describe('DataStoreService', () => {
         'bot-1.json',
         'bot-2.json',
         'bot-3.txt', // non-json, skip
-      ] as any);
+      ] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
 
       mockedFs.stat
         .mockResolvedValueOnce({
           mtimeMs: Date.now() - 8 * 24 * 60 * 60 * 1000, // expired
-        } as any)
+        } as unknown as Stats)
         .mockResolvedValueOnce({
           mtimeMs: Date.now() - 1000, // fresh
-        } as any);
+        } as unknown as Stats);
 
       mockedFs.unlink.mockResolvedValue(undefined);
 
@@ -124,7 +125,7 @@ describe('DataStoreService', () => {
     });
 
     it('should return 0 when no files exist', async () => {
-      mockedFs.readdir.mockResolvedValue([] as any);
+      mockedFs.readdir.mockResolvedValue([] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
 
       const cleaned = await service.cleanupExpiredGlobalData();
       expect(cleaned).toBe(0);
@@ -138,7 +139,9 @@ describe('DataStoreService', () => {
     });
 
     it('should skip files that error during stat', async () => {
-      mockedFs.readdir.mockResolvedValue(['bot-1.json'] as any);
+      mockedFs.readdir.mockResolvedValue(['bot-1.json'] as unknown as Awaited<
+        ReturnType<typeof fs.readdir>
+      >);
       mockedFs.stat.mockRejectedValue(new Error('ENOENT'));
 
       const cleaned = await service.cleanupExpiredGlobalData();

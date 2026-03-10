@@ -7,10 +7,10 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { ConfigService } from '@nestjs/config';
+import { Counter, Gauge, Histogram } from 'prom-client';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { Counter, Gauge, Histogram } from 'prom-client';
 
 import { Match, MatchTask, CompileSummary } from '../domain/match';
 import { JudgeCommand } from '../domain/round';
@@ -87,7 +87,6 @@ export class RunMatchUseCase {
       if (err instanceof MatchTimeoutError) {
         this.logger.error(err.message);
         verdict = Verdict.TLE;
-        // 超时：所有玩家得 0 分，verdict = SE
         if (!match.isFinished) {
           const scores: Record<string, number> = {};
           for (const spec of task.bots) {
@@ -109,8 +108,8 @@ export class RunMatchUseCase {
         await strategy.cleanup(bot);
       }
       session.clear();
-      await fs.rm(workDir, { recursive: true, force: true }).catch((err) => {
-        this.logger.warn(`临时目录清理失败: ${workDir}: ${err}`);
+      await fs.rm(workDir, { recursive: true, force: true }).catch((cleanupErr) => {
+        this.logger.warn(`临时目录清理失败: ${workDir}: ${cleanupErr}`);
       });
     }
   }
@@ -125,7 +124,6 @@ export class RunMatchUseCase {
     compiles: CompileSummary[],
     session: SessionScope,
   ): Promise<void> {
-    // ── 阶段1: 编译所有代码 ──
     for (const spec of task.bots) {
       const compileSummary = await this.compileBot(spec, workDir, bots);
       compiles.push(compileSummary);
@@ -143,14 +141,12 @@ export class RunMatchUseCase {
       histories.set(spec.id, { requests: [], responses: [] });
     }
 
-    // ── 阶段2: 对局循环 ──
     const initdata = task.initdata ?? '';
 
     while (match.hasRoundsLeft) {
       const round = match.nextRound();
       this.logger.debug(`对局轮次 ${round}`);
 
-      // 运行裁判
       const judgerBot = bots.get('judger');
       if (!judgerBot) {
         this.logger.error('未找到裁判代码');
@@ -174,7 +170,6 @@ export class RunMatchUseCase {
       await this.updatePersistentData(judgerBot.id, judgerOutput, session);
       judgerHistory.responses.push(judgerOutput.response);
 
-      // 解析裁判输出
       let judgeCmd: JudgeCommand;
       try {
         judgeCmd = JSON.parse(judgerOutput.response) as JudgeCommand;
@@ -183,7 +178,6 @@ export class RunMatchUseCase {
         break;
       }
 
-      // 判定是否结束
       if (judgeCmd.command === 'finish') {
         const scores = judgeCmd.content as Record<string, number>;
         const result = match.finish(scores, compiles);
@@ -191,7 +185,6 @@ export class RunMatchUseCase {
         return;
       }
 
-      // command === "request": 向各 bot 发送请求
       const botResponses: Record<string, string> = {};
       for (const [botId, request] of Object.entries(judgeCmd.content)) {
         if (botId === 'judger') continue;
@@ -211,18 +204,14 @@ export class RunMatchUseCase {
       }
 
       match.addLog({ round, judgeCmd, botResponses });
-
-      // 将 bot 回复汇总给裁判作为下一轮的 request
       judgerHistory.requests.push(JSON.stringify(botResponses));
 
-      // 回报当前轮进度
       await this.callbackService.update(task.callback.update, {
         round,
         display: judgeCmd.display,
       });
     }
 
-    // 超过最大轮次
     this.logger.warn('对局超过最大轮次限制');
     const scores: Record<string, number> = {};
     for (const spec of task.bots) {
