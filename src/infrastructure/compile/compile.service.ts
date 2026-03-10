@@ -76,7 +76,9 @@ export class CompileService {
         const cached = this.cache.get(hash);
         if (cached) {
           try {
-            await fs.access(path.join(this.cacheDir, hash));
+            const cachedLang = this.languages.get(cached.compiled.language);
+            const sourceFile = path.join(this.cacheDir, hash, `main${cachedLang?.extension ?? ''}`);
+            await fs.access(sourceFile);
             cached.lastAccess = Date.now();
             this.cacheHits.inc();
             span.setAttribute('compile.cacheHit', true);

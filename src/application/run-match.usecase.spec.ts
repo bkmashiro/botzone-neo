@@ -333,6 +333,18 @@ describe('RunMatchUseCase', () => {
       expect(mockHistogram.observe).toHaveBeenCalledWith({ type: 'botzone' }, expect.any(Number));
     });
 
+    it('should record CE verdict when a bot fails to compile', async () => {
+      mockCompileService.compile
+        .mockResolvedValueOnce(compiledBot)
+        .mockRejectedValueOnce(new CompileError('syntax error'));
+
+      await useCase.execute(task);
+
+      expect(mockCounter.inc).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'botzone', verdict: Verdict.CE }),
+      );
+    });
+
     it('should record SE verdict when an unexpected error is thrown', async () => {
       mockCompileService.compile.mockRejectedValue(new Error('unexpected'));
 

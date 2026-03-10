@@ -90,10 +90,11 @@ export class RunMatchUseCase {
       let verdict = Verdict.OK;
 
       try {
-        await Promise.race([
+        const innerVerdict = await Promise.race([
           this.executeInner(task, match, workDir, strategy, bots, histories, compiles, session),
           timeoutPromise,
         ]);
+        if (innerVerdict) verdict = innerVerdict;
       } catch (err) {
         if (err instanceof MatchTimeoutError) {
           this.logger.error(err.message);
@@ -138,7 +139,7 @@ export class RunMatchUseCase {
     histories: Map<string, { requests: string[]; responses: string[] }>,
     compiles: CompileSummary[],
     session: SessionScope,
-  ): Promise<void> {
+  ): Promise<Verdict | void> {
     // ── 阶段1: 编译所有代码 ──
     for (const spec of task.bots) {
       this.logger.debug(`编译 Bot: id=${spec.id}, language=${spec.language}`);
@@ -156,7 +157,7 @@ export class RunMatchUseCase {
         }
         const result = match.finish(scores, compiles);
         await this.callbackService.finish(task.callback.finish, result);
-        return;
+        return Verdict.CE;
       }
       histories.set(spec.id, { requests: [], responses: [] });
     }

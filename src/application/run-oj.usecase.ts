@@ -95,7 +95,7 @@ export class RunOJUseCase {
 
       // ── 逐个测试用例评测 ──
       const testcaseResults: TestcaseResult[] = [];
-      let overallVerdict: string = Verdict.AC;
+      let overallVerdict: Verdict = Verdict.AC;
 
       const defaultLimit = { timeMs: task.timeLimitMs, memoryMb: task.memoryLimitMb };
 
@@ -157,7 +157,7 @@ export class RunOJUseCase {
       this.logger.log(
         `OJ 评测完成: verdict=${overallVerdict}, testcases=${testcaseResults.length}`,
       );
-      verdict = overallVerdict as Verdict;
+      verdict = overallVerdict;
       const result: OJResult = {
         verdict: overallVerdict,
         testcases: testcaseResults,

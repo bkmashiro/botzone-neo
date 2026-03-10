@@ -255,7 +255,7 @@ describe('LongrunStrategy', () => {
   });
 
   describe('stdin non-EPIPE error', () => {
-    it('should re-throw non-EPIPE errors from stdin', async () => {
+    it('should mark process as exited on non-EPIPE stdin error', async () => {
       const child = createMockChild();
       mockSpawn.mockReturnValue(child);
 
@@ -270,7 +270,11 @@ describe('LongrunStrategy', () => {
       const nonEpipeErr = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' });
       expect(() => {
         child.stdin!.emit('error', nonEpipeErr);
-      }).toThrow('ECONNRESET');
+      }).not.toThrow();
+
+      // Subsequent round should detect exited process
+      const output = await strategy.runRound(mockBot, mockInput);
+      expect(output.debug).toContain('进程已退出');
     });
 
     it('should swallow EPIPE errors from stdin', async () => {
