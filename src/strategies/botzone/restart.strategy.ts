@@ -70,12 +70,11 @@ export class RestartStrategy implements IBotRunStrategy {
         const output = parsed as Record<string, unknown>;
         // If the JSON has a "command" field (judger output), the whole line IS the response
         // If the JSON has a "response" field (structured bot output), use that
-        const response =
-          typeof output.response === 'string'
-            ? output.response
-            : 'command' in output
-              ? firstLine // judger: pass whole JSON as response
-              : '';
+        // Priority:
+        // 1. explicit "response" field (structured bot output)
+        // 2. "command" field → judger output, pass whole line
+        // 3. Any other JSON object → pass whole line as response (e.g. {"0": 4})
+        const response = typeof output.response === 'string' ? output.response : firstLine; // judger cmd or plain move JSON — pass whole line
         return {
           response,
           debug: typeof output.debug === 'string' ? output.debug : undefined,

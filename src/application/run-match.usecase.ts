@@ -254,9 +254,21 @@ export class RunMatchUseCase {
         }),
       );
 
-      const botResponses: Record<string, string> = {};
+      // Merge bot responses into a combined dict for the judger.
+      // If a bot outputs a JSON object (e.g. {"0": 8}), merge its keys directly
+      // so the judger receives {"0": 8} instead of {"0": "{\"0\":8}"}.
+      const botResponses: Record<string, unknown> = {};
       for (const [botId, response] of botResults) {
-        botResponses[botId] = response;
+        try {
+          const parsed: unknown = JSON.parse(response);
+          if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+            Object.assign(botResponses, parsed); // merge {"0": 8} directly
+          } else {
+            botResponses[botId] = parsed; // primitive: number/string/bool
+          }
+        } catch {
+          botResponses[botId] = response; // raw string fallback
+        }
       }
 
       match.addLog({ round, judgeCmd, botResponses });
