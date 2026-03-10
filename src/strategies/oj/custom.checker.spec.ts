@@ -1,12 +1,11 @@
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import * as os from 'os';
+
 import { CustomChecker } from './custom.checker';
 import { Verdict } from '../../domain/verdict';
-import { ISandbox, SandboxResult } from '../../infrastructure/sandbox/sandbox.interface';
+import { ISandbox, SandboxRequest, SandboxResult } from '../../infrastructure/sandbox/sandbox.interface';
 import { CompiledBot } from '../../domain/bot';
-
-/** 创建一个 mock sandbox，返回指定的 SandboxResult */
-function mockSandbox(result: SandboxResult): ISandbox {
-  return { execute: jest.fn().mockResolvedValue(result) };
-}
 
 const dummyCompiled: CompiledBot = {
   cmd: './checker',
@@ -15,146 +14,168 @@ const dummyCompiled: CompiledBot = {
   readonlyMounts: [],
 };
 
-describe('CustomChecker', () => {
-  it('checker 输出 AC → 判定 AC', async () => {
-    const sandbox = mockSandbox({
-      stdout: 'AC\n',
+/** 创建 mock sandbox 并捕获请求 */
+function mockSandbox(result: SandboxResult): {
+  sandbox: ISandbox;
+  lastRequest: () => SandboxRequest | undefined;
+} {
+  let captured: SandboxRequest | undefined;
+  const sandbox: ISandbox = {
+    execute: async (req: SandboxRequest) => {
+      captured = req;
+      return result;
+    },
+  };
+  return { sandbox, lastRequest: () => captured };
+}
+
+describe('CustomChecker (Codeforces testlib.h 格式)', () => {
+  let workDir: string;
+
+  beforeEach(async () => {
+    workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'checker-test-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(workDir, { recursive: true, force: true });
+  });
+
+  it('exit code 0 → AC', async () => {
+    const { sandbox } = mockSandbox({
+      stdout: '',
       stderr: '',
       exitCode: 0,
       timedOut: false,
     });
-    const checker = new CustomChecker(sandbox, dummyCompiled, '/tmp');
-
+    const checker = new CustomChecker(sandbox, dummyCompiled, workDir);
     const result = await checker.check('1 2', '3', '3');
     expect(result.verdict).toBe(Verdict.AC);
   });
 
-  it('checker 输出 AC + message → 判定 AC 并携带 message', async () => {
-    const sandbox = mockSandbox({
-      stdout: 'AC\nCorrect answer\n',
-      stderr: '',
+  it('exit code 0 + stderr → AC with message', async () => {
+    const { sandbox } = mockSandbox({
+      stdout: '',
+      stderr: 'ok 1 number(s): "3"',
       exitCode: 0,
       timedOut: false,
     });
-    const checker = new CustomChecker(sandbox, dummyCompiled, '/tmp');
-
+    const checker = new CustomChecker(sandbox, dummyCompiled, workDir);
     const result = await checker.check('1 2', '3', '3');
     expect(result.verdict).toBe(Verdict.AC);
-    expect(result.message).toBe('Correct answer');
+    expect(result.message).toBe('ok 1 number(s): "3"');
   });
 
-  it('checker 输出 WA → 判定 WA', async () => {
-    const sandbox = mockSandbox({
-      stdout: 'WA\nExpected 3, got 4\n',
-      stderr: '',
-      exitCode: 0,
+  it('exit code 1 → WA', async () => {
+    const { sandbox } = mockSandbox({
+      stdout: '',
+      stderr: 'expected 3, found 4',
+      exitCode: 1,
       timedOut: false,
     });
-    const checker = new CustomChecker(sandbox, dummyCompiled, '/tmp');
-
+    const checker = new CustomChecker(sandbox, dummyCompiled, workDir);
     const result = await checker.check('1 2', '3', '4');
     expect(result.verdict).toBe(Verdict.WA);
-    expect(result.message).toBe('Expected 3, got 4');
+    expect(result.message).toBe('expected 3, found 4');
   });
 
-  it('checker 输出 WA 无 message → 默认 "Wrong Answer"', async () => {
-    const sandbox = mockSandbox({
-      stdout: 'WA\n',
-      stderr: '',
-      exitCode: 0,
-      timedOut: false,
-    });
-    const checker = new CustomChecker(sandbox, dummyCompiled, '/tmp');
-
-    const result = await checker.check('1 2', '3', '4');
-    expect(result.verdict).toBe(Verdict.WA);
-    expect(result.message).toBe('Wrong Answer');
-  });
-
-  it('checker 超时 → 判定 WA 并报异常', async () => {
-    const sandbox = mockSandbox({
-      stdout: '',
-      stderr: '',
-      exitCode: -1,
-      timedOut: true,
-    });
-    const checker = new CustomChecker(sandbox, dummyCompiled, '/tmp');
-
-    const result = await checker.check('1 2', '3', '3');
-    expect(result.verdict).toBe(Verdict.WA);
-    expect(result.message).toContain('Checker 异常');
-  });
-
-  it('checker 崩溃（非零退出码）→ 判定 WA 并报 stderr', async () => {
-    const sandbox = mockSandbox({
-      stdout: '',
-      stderr: 'segfault',
-      exitCode: 139,
-      timedOut: false,
-    });
-    const checker = new CustomChecker(sandbox, dummyCompiled, '/tmp');
-
-    const result = await checker.check('1 2', '3', '3');
-    expect(result.verdict).toBe(Verdict.WA);
-    expect(result.message).toContain('segfault');
-  });
-
-  it('checker 崩溃无 stderr → 报退出码', async () => {
-    const sandbox = mockSandbox({
+  it('exit code 1 无 stderr → 默认 "Wrong Answer"', async () => {
+    const { sandbox } = mockSandbox({
       stdout: '',
       stderr: '',
       exitCode: 1,
       timedOut: false,
     });
-    const checker = new CustomChecker(sandbox, dummyCompiled, '/tmp');
-
-    const result = await checker.check('1 2', '3', '3');
+    const checker = new CustomChecker(sandbox, dummyCompiled, workDir);
+    const result = await checker.check('1 2', '3', '4');
     expect(result.verdict).toBe(Verdict.WA);
-    expect(result.message).toContain('exit code 1');
+    expect(result.message).toBe('Wrong Answer');
   });
 
-  it('正确拼接 stdin（input/expected/actual 用 --- 分隔）', async () => {
-    const executeMock = jest.fn().mockResolvedValue({
-      stdout: 'AC\n',
-      stderr: '',
-      exitCode: 0,
+  it('exit code 2 → PE', async () => {
+    const { sandbox } = mockSandbox({
+      stdout: '',
+      stderr: 'trailing whitespace',
+      exitCode: 2,
       timedOut: false,
     });
-    const sandbox: ISandbox = { execute: executeMock };
-    const checker = new CustomChecker(sandbox, dummyCompiled, '/tmp');
-
-    await checker.check('my input', 'expected out', 'actual out');
-
-    expect(executeMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        stdin: 'my input\n---\nexpected out\n---\nactual out',
-      }),
-    );
+    const checker = new CustomChecker(sandbox, dummyCompiled, workDir);
+    const result = await checker.check('', '', '  ');
+    expect(result.verdict).toBe(Verdict.PE);
+    expect(result.message).toBe('trailing whitespace');
   });
 
-  it('checker 输出大小写不敏感（ac → AC）', async () => {
-    const sandbox = mockSandbox({
-      stdout: 'ac\n',
+  it('超时 → SE', async () => {
+    const { sandbox } = mockSandbox({
+      stdout: '',
       stderr: '',
-      exitCode: 0,
+      exitCode: -1,
+      timedOut: true,
+    });
+    const checker = new CustomChecker(sandbox, dummyCompiled, workDir);
+    const result = await checker.check('1 2', '3', '3');
+    expect(result.verdict).toBe(Verdict.SE);
+    expect(result.message).toContain('超时');
+  });
+
+  it('未知退出码 → SE (checker 崩溃)', async () => {
+    const { sandbox } = mockSandbox({
+      stdout: '',
+      stderr: 'segfault',
+      exitCode: 139,
       timedOut: false,
     });
-    const checker = new CustomChecker(sandbox, dummyCompiled, '/tmp');
-
-    const result = await checker.check('', '', '');
-    expect(result.verdict).toBe(Verdict.AC);
+    const checker = new CustomChecker(sandbox, dummyCompiled, workDir);
+    const result = await checker.check('1 2', '3', '3');
+    expect(result.verdict).toBe(Verdict.SE);
+    expect(result.message).toContain('139');
+    expect(result.message).toContain('segfault');
   });
 
-  it('checker 空输出 → 判定 WA', async () => {
-    const sandbox = mockSandbox({
+  it('写入 input/expected/actual 文件到 workDir', async () => {
+    const { sandbox } = mockSandbox({
       stdout: '',
       stderr: '',
       exitCode: 0,
       timedOut: false,
     });
-    const checker = new CustomChecker(sandbox, dummyCompiled, '/tmp');
+    const checker = new CustomChecker(sandbox, dummyCompiled, workDir);
+    await checker.check('my input', 'expected out', 'actual out');
 
+    const input = await fs.readFile(path.join(workDir, 'input.txt'), 'utf-8');
+    const expected = await fs.readFile(path.join(workDir, 'expected.txt'), 'utf-8');
+    const actual = await fs.readFile(path.join(workDir, 'actual.txt'), 'utf-8');
+
+    expect(input).toBe('my input');
+    expect(expected).toBe('expected out');
+    expect(actual).toBe('actual out');
+  });
+
+  it('传递文件路径作为 checker 参数', async () => {
+    const { sandbox, lastRequest } = mockSandbox({
+      stdout: '',
+      stderr: '',
+      exitCode: 0,
+      timedOut: false,
+    });
+    const checker = new CustomChecker(sandbox, dummyCompiled, workDir);
+    await checker.check('in', 'exp', 'act');
+
+    const req = lastRequest()!;
+    expect(req.compiled.args).toContain(path.join(workDir, 'input.txt'));
+    expect(req.compiled.args).toContain(path.join(workDir, 'expected.txt'));
+    expect(req.compiled.args).toContain(path.join(workDir, 'actual.txt'));
+  });
+
+  it('stdout 作为 fallback message（无 stderr 时）', async () => {
+    const { sandbox } = mockSandbox({
+      stdout: 'checker stdout message',
+      stderr: '',
+      exitCode: 0,
+      timedOut: false,
+    });
+    const checker = new CustomChecker(sandbox, dummyCompiled, workDir);
     const result = await checker.check('', '', '');
-    expect(result.verdict).toBe(Verdict.WA);
+    expect(result.verdict).toBe(Verdict.AC);
+    expect(result.message).toBe('checker stdout message');
   });
 });
