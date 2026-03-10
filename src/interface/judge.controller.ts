@@ -137,11 +137,17 @@ export class JudgeController {
       if (!code['language'] || typeof code['language'] !== 'string') {
         throw new BadRequestException(`${id}: 缺少 language`);
       }
-      if (!code['source'] || typeof code['source'] !== 'string') {
-        throw new BadRequestException(`${id}: 缺少 source`);
+      const isWebhook = code['runnerType'] === 'webhook';
+      if (!isWebhook) {
+        if (!code['source'] || typeof code['source'] !== 'string') {
+          throw new BadRequestException(`${id}: 缺少 source`);
+        }
+        if ((code['source'] as string).length > MAX_SOURCE_LENGTH) {
+          throw new BadRequestException(`${id}: source 超过 64KB 限制`);
+        }
       }
-      if ((code['source'] as string).length > MAX_SOURCE_LENGTH) {
-        throw new BadRequestException(`${id}: source 超过 64KB 限制`);
+      if (isWebhook && (!code['externalUrl'] || typeof code['externalUrl'] !== 'string')) {
+        throw new BadRequestException(`${id}: webhook bot 缺少 externalUrl`);
       }
       const limit = code['limit'] as Record<string, unknown> | undefined;
       if (!limit || typeof limit !== 'object') {
@@ -364,8 +370,11 @@ export class JudgeController {
       string,
       {
         language: string;
-        source: string;
+        source?: string;
         limit: { time: number; memory: number };
+        runnerType?: 'code' | 'webhook';
+        externalUrl?: string;
+        webhookTimeoutMs?: number;
       }
     >;
     const callback = body['callback'] as { update: string; finish: string };
@@ -378,11 +387,14 @@ export class JudgeController {
     const bots: BotSpec[] = Object.entries(game).map(([id, code]) => ({
       id,
       language: code.language,
-      source: code.source,
+      source: code.source ?? '',
       limit: {
         timeMs: code.limit.time,
         memoryMb: code.limit.memory,
       },
+      runnerType: code.runnerType ?? 'code',
+      externalUrl: code.externalUrl,
+      webhookTimeoutMs: code.webhookTimeoutMs,
     }));
 
     return {
