@@ -45,6 +45,7 @@ export class DataStoreService implements OnModuleInit {
         this.logger.warn(`定期清理失败: ${err}`);
       });
     }, CLEANUP_INTERVAL_MS);
+    this.cleanupTimer.unref();
   }
 
   onModuleDestroy(): void {

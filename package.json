@@ -11,6 +11,8 @@
     "start:prod": "node dist/main",
     "test": "jest --forceExit --detectOpenHandles",
     "test:cov": "jest --coverage --forceExit --detectOpenHandles",
+    "test:coverage": "jest --coverage --forceExit --detectOpenHandles",
+    "test:e2e": "jest --config test/jest-e2e.config.ts --forceExit --detectOpenHandles",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\"",

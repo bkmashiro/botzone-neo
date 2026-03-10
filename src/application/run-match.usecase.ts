@@ -192,7 +192,12 @@ export class RunMatchUseCase {
 
       let judgeCmd: JudgeCommand;
       try {
-        judgeCmd = JSON.parse(judgerOutput.response) as JudgeCommand;
+        const parsed = JSON.parse(judgerOutput.response) as Record<string, unknown>;
+        if (!parsed.command || !parsed.content || typeof parsed.content !== 'object') {
+          this.logger.error(`裁判输出格式无效: 缺少 command 或 content`);
+          break;
+        }
+        judgeCmd = parsed as unknown as JudgeCommand;
       } catch {
         this.logger.error('裁判输出 JSON 解析失败');
         break;
