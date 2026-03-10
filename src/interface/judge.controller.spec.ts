@@ -420,6 +420,22 @@ describe('JudgeController', () => {
       const result = await controller.submitTask(body);
       expect(result.jobId).toBe('job-456');
     });
+
+    it('should accept public IPv6 callback URL', async () => {
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
+        callback: { finish: 'http://[2001:db8::1]/callback' },
+        judgeMode: 'standard',
+      };
+
+      const result = await controller.submitTask(body);
+      expect(result.jobId).toBe('job-456');
+    });
   });
 
   describe('checker mode validation', () => {

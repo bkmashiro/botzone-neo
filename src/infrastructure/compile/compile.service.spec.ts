@@ -255,6 +255,51 @@ describe('CompileService (infrastructure)', () => {
     });
   });
 
+  describe('cache invalidation', () => {
+    it('should re-compile when cached file no longer exists on disk', async () => {
+      mockSpawn.mockImplementation(() => createFakeChild(0));
+      (fs.access as jest.Mock).mockResolvedValue(undefined);
+
+      // First compile — cache miss
+      await service.compile('cpp', 'int main() { return 42; }');
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+
+      // Simulate cached file deleted from disk
+      (fs.access as jest.Mock).mockRejectedValueOnce(new Error('ENOENT'));
+
+      // Second compile — cache file gone, should re-compile
+      await service.compile('cpp', 'int main() { return 42; }');
+      expect(mockSpawn).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('evictCache error handling', () => {
+    it('should not throw when fs.rm fails during cache eviction', async () => {
+      const smallConfig = {
+        get: jest.fn((key: string, defaultVal: unknown) => {
+          if (key === 'COMPILE_CACHE_SIZE') return 1;
+          return defaultVal;
+        }),
+      } as unknown as ConfigService;
+      const smallService = new CompileService(
+        smallConfig,
+        { inc: jest.fn() } as never,
+        { inc: jest.fn() } as never,
+      );
+
+      mockSpawn.mockImplementation(() => createFakeChild(0));
+      (fs.rm as jest.Mock).mockRejectedValue(new Error('EPERM'));
+
+      // Fill cache (size 1), then add another to trigger eviction
+      await smallService.compile('cpp', 'int main() { return 1; }');
+      await smallService.compile('cpp', 'int main() { return 2; }');
+
+      // Should not throw despite fs.rm failure
+      // Allow microtask for the .catch() to run
+      await new Promise((r) => setTimeout(r, 10));
+    });
+  });
+
   describe('cache hit metrics', () => {
     it('should increment cache hit counter on cache hit', async () => {
       const mockCacheHits = { inc: jest.fn() };
