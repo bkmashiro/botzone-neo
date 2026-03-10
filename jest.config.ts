@@ -7,7 +7,12 @@ const config: Config = {
   transform: {
     '^.+\\.ts$': 'ts-jest',
   },
-  collectCoverageFrom: ['src/**/*.ts', '!src/main.ts'],
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/main.ts',
+    '!src/telemetry.ts',
+    '!src/interface/main.ts',
+  ],
   coverageDirectory: './coverage',
   testEnvironment: 'node',
   moduleNameMapper: {

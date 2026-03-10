@@ -7,11 +7,17 @@ import * as os from 'os';
 
 import { JUDGE_QUEUE } from './judge-queue.service';
 
+/**
+ * Individual component health status with optional error message.
+ */
 interface ComponentStatus {
   status: 'ok' | 'error';
   message?: string;
 }
 
+/**
+ * System health status response including version, uptime, and component statuses.
+ */
 interface HealthResponse {
   status: 'ok' | 'degraded';
   version: string;
@@ -24,6 +30,9 @@ interface HealthResponse {
 
 @ApiTags('health')
 @Controller('health')
+/**
+ * Health check controller for monitoring system and component status.
+ */
 export class HealthController {
   private readonly logger = new Logger(HealthController.name);
 

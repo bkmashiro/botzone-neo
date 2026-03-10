@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 jest.mock('../application/run-match.usecase', () => ({
   RunMatchUseCase: jest.fn(),
@@ -14,7 +14,10 @@ import { JudgeQueueService } from './judge-queue.service';
 describe('JudgeController', () => {
   let controller: JudgeController;
 
-  const mockQueueService = { enqueue: jest.fn().mockResolvedValue('job-456') };
+  const mockQueueService: Record<string, jest.Mock> = {
+    enqueue: jest.fn().mockResolvedValue('job-456'),
+    getJobStatus: jest.fn(),
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -40,6 +43,22 @@ describe('JudgeController', () => {
     callback: { finish: 'http://finish' },
     judgeMode: 'standard',
   };
+
+  describe('getJobStatus', () => {
+    it('should return job status when job exists', async () => {
+      const status = { jobId: 'job-1', state: 'completed', type: 'botzone' };
+      mockQueueService.getJobStatus.mockResolvedValue(status);
+
+      const result = await controller.getJobStatus('job-1');
+      expect(result).toEqual(status);
+    });
+
+    it('should throw NotFoundException when job does not exist', async () => {
+      mockQueueService.getJobStatus.mockResolvedValue(null);
+
+      await expect(controller.getJobStatus('nonexistent')).rejects.toThrow(NotFoundException);
+    });
+  });
 
   describe('submitTask', () => {
     it('should accept a valid botzone task and return job id', async () => {
@@ -99,6 +118,30 @@ describe('JudgeController', () => {
       await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
     });
 
+    it('should throw when source is missing on a bot', async () => {
+      const body = {
+        type: 'botzone',
+        game: {
+          judger: { language: 'cpp', limit: { time: 1000, memory: 256 } },
+        },
+        callback: { update: 'http://update', finish: 'http://finish' },
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw when limit is missing on a bot', async () => {
+      const body = {
+        type: 'botzone',
+        game: {
+          judger: { language: 'cpp', source: 'code' },
+        },
+        callback: { update: 'http://update', finish: 'http://finish' },
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
     it('should throw when time limit is invalid', async () => {
       const body = {
         type: 'botzone',
@@ -107,6 +150,22 @@ describe('JudgeController', () => {
             language: 'cpp',
             source: 'code',
             limit: { time: 0, memory: 256 },
+          },
+        },
+        callback: { update: 'http://update', finish: 'http://finish' },
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw when memory limit is invalid', async () => {
+      const body = {
+        type: 'botzone',
+        game: {
+          judger: {
+            language: 'cpp',
+            source: 'code',
+            limit: { time: 1000, memory: 10 },
           },
         },
         callback: { update: 'http://update', finish: 'http://finish' },
@@ -123,6 +182,65 @@ describe('JudgeController', () => {
         language: 'cpp',
         timeLimitMs: 1000,
         memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
+        callback: { finish: 'http://finish' },
+        judgeMode: 'standard',
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw when source exceeds 64KB for OJ', async () => {
+      const body = {
+        type: 'oj',
+        source: 'x'.repeat(65537),
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
+        callback: { finish: 'http://finish' },
+        judgeMode: 'standard',
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw when language is missing', async () => {
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
+        callback: { finish: 'http://finish' },
+        judgeMode: 'standard',
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw when timeLimitMs is out of range', async () => {
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 999999,
+        memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
+        callback: { finish: 'http://finish' },
+        judgeMode: 'standard',
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw when memoryLimitMb is out of range', async () => {
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 10,
         testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
         callback: { finish: 'http://finish' },
         judgeMode: 'standard',
@@ -154,6 +272,35 @@ describe('JudgeController', () => {
         memoryLimitMb: 256,
         testcases: [{ id: 1, input: 'x'.repeat(10 * 1024 * 1024 + 1), expectedOutput: '1\n' }],
         callback: { finish: 'http://finish' },
+        judgeMode: 'standard',
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw when testcase expectedOutput exceeds 10MB limit', async () => {
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: 'x'.repeat(10 * 1024 * 1024 + 1) }],
+        callback: { finish: 'http://finish' },
+        judgeMode: 'standard',
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw when callback.finish is missing', async () => {
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
         judgeMode: 'standard',
       };
 
