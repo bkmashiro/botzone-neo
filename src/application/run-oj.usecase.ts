@@ -120,6 +120,10 @@ export class RunOJUseCase {
         const timeMs = Date.now() - tcStartTime;
         const memoryKb = sandboxResult.memoryKb;
 
+        if (sandboxResult.outputTruncated) {
+          this.logger.warn(`testcase=${tc.id}: 输出被截断（超过大小限制）`);
+        }
+
         if (sandboxResult.timedOut) {
           testcaseResults.push({ id: tc.id, verdict: Verdict.TLE, timeMs, memoryKb });
           if (overallVerdict === Verdict.AC) overallVerdict = Verdict.TLE;

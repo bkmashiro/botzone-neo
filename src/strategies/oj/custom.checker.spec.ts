@@ -4,7 +4,11 @@ import * as os from 'os';
 
 import { CustomChecker } from './custom.checker';
 import { Verdict } from '../../domain/verdict';
-import { ISandbox, SandboxRequest, SandboxResult } from '../../infrastructure/sandbox/sandbox.interface';
+import {
+  ISandbox,
+  SandboxRequest,
+  SandboxResult,
+} from '../../infrastructure/sandbox/sandbox.interface';
 import { CompiledBot } from '../../domain/bot';
 
 const dummyCompiled: CompiledBot = {
@@ -164,6 +168,34 @@ describe('CustomChecker (Codeforces testlib.h 格式)', () => {
     expect(req.compiled.args).toContain(path.join(workDir, 'input.txt'));
     expect(req.compiled.args).toContain(path.join(workDir, 'expected.txt'));
     expect(req.compiled.args).toContain(path.join(workDir, 'actual.txt'));
+  });
+
+  it('exit code 2 无 stderr → 默认 "Presentation Error"', async () => {
+    const { sandbox } = mockSandbox({
+      stdout: '',
+      stderr: '',
+      exitCode: 2,
+      timedOut: false,
+    });
+    const checker = new CustomChecker(sandbox, dummyCompiled, workDir);
+    const result = await checker.check('', '', '');
+    expect(result.verdict).toBe(Verdict.PE);
+    expect(result.message).toBe('Presentation Error');
+  });
+
+  it('截断超过 1000 字符的 checker 消息', async () => {
+    const longMessage = 'A'.repeat(1500);
+    const { sandbox } = mockSandbox({
+      stdout: '',
+      stderr: longMessage,
+      exitCode: 1,
+      timedOut: false,
+    });
+    const checker = new CustomChecker(sandbox, dummyCompiled, workDir);
+    const result = await checker.check('', '', '');
+    expect(result.verdict).toBe(Verdict.WA);
+    expect(result.message!.length).toBeLessThanOrEqual(1004); // 1000 + '...'
+    expect(result.message).toContain('...');
   });
 
   it('stdout 作为 fallback message（无 stderr 时）', async () => {
