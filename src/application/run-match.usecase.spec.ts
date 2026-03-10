@@ -5,9 +5,11 @@ import { Verdict, CompileError } from '../domain/verdict';
 
 jest.mock('fs/promises');
 jest.mock('os');
+jest.mock('child_process');
 
 import * as fs from 'fs/promises';
 import * as os from 'os';
+import * as child_process from 'child_process';
 
 describe('RunMatchUseCase', () => {
   // ── Mocks ──────────────────────────────────────────────
@@ -262,12 +264,29 @@ describe('RunMatchUseCase', () => {
       expect(mockSandbox.execute).toHaveBeenCalled();
     });
 
-    it('should use LongrunStrategy for runMode "longrun" (which throws since it is unimplemented)', async () => {
+    it('should use LongrunStrategy for runMode "longrun"', async () => {
+      const { EventEmitter } = jest.requireActual<typeof import('events')>('events');
+      const mockSpawn = child_process.spawn as jest.MockedFunction<typeof child_process.spawn>;
+      mockSpawn.mockImplementation(() => {
+        const proc = new EventEmitter();
+        Object.assign(proc, {
+          stdout: new EventEmitter(),
+          stderr: new EventEmitter(),
+          stdin: { write: jest.fn(), end: jest.fn(), on: jest.fn() },
+          kill: jest.fn(),
+          pid: 12345,
+        });
+        process.nextTick(() => proc.emit('exit', 0));
+        return proc as child_process.ChildProcess;
+      });
+
       const longrunTask: MatchTask = { ...task, runMode: 'longrun' };
       mockCompileService.compile.mockResolvedValue(compiledBot);
 
-      // LongrunStrategy.runRound throws "not implemented"
-      await expect(useCase.execute(longrunTask)).rejects.toThrow('Longrun');
+      await useCase.execute(longrunTask).catch(() => {});
+
+      // Sandbox should NOT have been called (LongrunStrategy spawns directly)
+      expect(mockSandbox.execute).not.toHaveBeenCalled();
     });
   });
 

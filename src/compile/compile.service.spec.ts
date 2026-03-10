@@ -171,6 +171,88 @@ describe('CompileService', () => {
     });
   });
 
+  describe('runCompiler edge cases', () => {
+    it('should handle compiler timeout', async () => {
+      const shortConfig = {
+        get: jest.fn((key: string, defaultVal: unknown) => {
+          if (key === 'COMPILE_TIME_LIMIT_MS') return 50;
+          return defaultVal;
+        }),
+      } as unknown as ConfigService;
+      const shortService = new CompileService(shortConfig);
+
+      const emitter = new EventEmitter();
+      const child = Object.assign(emitter, {
+        stdout: new EventEmitter(),
+        stderr: new EventEmitter(),
+        stdin: new Writable({
+          write(_c, _e, cb) {
+            cb();
+          },
+        }),
+        kill: jest.fn(),
+      }) as unknown as ChildProcess;
+      mockSpawn.mockReturnValue(child);
+
+      const result = await shortService.compile('cpp', 'timeout code');
+
+      expect(result.verdict).toBe('CE');
+      expect(result.message).toContain('编译超时');
+      expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+    }, 10000);
+
+    it('should capture stdout in compile error when stderr is empty', async () => {
+      mockSpawn.mockReturnValue(createFakeChild(1, 'stdout error info', ''));
+
+      const result = await service.compile('cpp', 'bad stdout');
+      expect(result.verdict).toBe('CE');
+      expect(result.message).toContain('stdout error info');
+    });
+
+    it('should reject on spawn error', async () => {
+      const emitter = new EventEmitter();
+      const child = Object.assign(emitter, {
+        stdout: new EventEmitter(),
+        stderr: new EventEmitter(),
+        stdin: new Writable({
+          write(_c, _e, cb) {
+            cb();
+          },
+        }),
+        kill: jest.fn(),
+      }) as unknown as ChildProcess;
+      mockSpawn.mockReturnValue(child);
+
+      const promise = service.compile('cpp', 'error code');
+      await new Promise((r) => {
+        setTimeout(r, 0);
+      });
+      child.emit('error', new Error('ENOENT'));
+
+      await expect(promise).rejects.toThrow('ENOENT');
+    });
+  });
+
+  describe('evictCache', () => {
+    it('should evict oldest entry when cache exceeds max size', async () => {
+      // Directly manipulate the private cache to avoid 200+ compilations
+      const cache = (service as unknown as { cache: Map<string, unknown> }).cache;
+      const maxCacheSize = (service as unknown as { maxCacheSize: number }).maxCacheSize;
+
+      // Fill cache to exactly maxCacheSize
+      for (let i = 0; i < maxCacheSize; i++) {
+        cache.set(`key-${i}`, { execCmd: '/bin/x', execArgs: [], lastAccess: i });
+      }
+
+      // One more compile triggers eviction
+      mockSpawn.mockImplementation(() => createFakeChild(0));
+      await service.compile('cpp', 'int main() { return 999; }');
+
+      // Cache should be at most maxCacheSize
+      expect(cache.size).toBeLessThanOrEqual(maxCacheSize);
+    });
+  });
+
   describe('语言配置', () => {
     it('应该正确注册三种语言', () => {
       expect(service.getLanguage('cpp')).toBeDefined();

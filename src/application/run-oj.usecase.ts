@@ -66,14 +66,29 @@ export class RunOJUseCase {
       let checker: IChecker;
       if (task.judgeMode === 'checker' && task.checkerLanguage && task.checkerSource) {
         this.logger.debug(`编译自定义 Checker: language=${task.checkerLanguage}`);
-        const checkerCompiled = await this.compileService.compile(
-          task.checkerLanguage,
-          task.checkerSource,
-        );
-        const checkerWorkDir = path.join(workDir, 'checker');
-        await fs.mkdir(checkerWorkDir, { recursive: true });
-        checker = new CustomChecker(this.sandbox, checkerCompiled, checkerWorkDir);
-        this.logger.debug('自定义 Checker 编译成功');
+        try {
+          const checkerCompiled = await this.compileService.compile(
+            task.checkerLanguage,
+            task.checkerSource,
+          );
+          const checkerWorkDir = path.join(workDir, 'checker');
+          await fs.mkdir(checkerWorkDir, { recursive: true });
+          checker = new CustomChecker(this.sandbox, checkerCompiled, checkerWorkDir);
+          this.logger.debug('自定义 Checker 编译成功');
+        } catch (err) {
+          if (err instanceof CompileError) {
+            this.logger.warn(`Checker 编译失败: ${err.message}`);
+            verdict = Verdict.CE;
+            const result: OJResult = {
+              verdict: Verdict.CE,
+              testcases: [],
+              compile: { verdict: Verdict.CE, message: `checker: ${err.message}` },
+            };
+            await this.callbackService.finish(task.callback.finish, result);
+            return;
+          }
+          throw err;
+        }
       } else {
         checker = new DiffChecker();
       }

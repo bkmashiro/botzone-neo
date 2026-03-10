@@ -487,6 +487,29 @@ describe('RunOJUseCase', () => {
     expect(result.testcases[0].message).toBe('expected 42, found 99');
   });
 
+  // ── 9b. Checker compile failure ──────────────────────────
+
+  it('should report CE when custom checker fails to compile', async () => {
+    // User code compiles fine, but checker compile fails
+    mockCompileService.compile
+      .mockResolvedValueOnce(compiledBot)
+      .mockRejectedValueOnce(new CompileError('checker: undefined reference to main'));
+
+    const task = makeTask({
+      judgeMode: 'checker',
+      checkerLanguage: 'cpp',
+      checkerSource: 'bad checker code',
+      testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
+    });
+
+    await useCase.execute(task);
+
+    const result: OJResult = mockCallbackService.finish.mock.calls[0][1];
+    expect(result.verdict).toBe(Verdict.CE);
+    expect(result.testcases).toHaveLength(0);
+    expect(result.compile.message).toContain('checker');
+  });
+
   // ── 10. Standard mode (DiffChecker) is used by default ────
 
   it('should use DiffChecker when judgeMode is "standard"', async () => {

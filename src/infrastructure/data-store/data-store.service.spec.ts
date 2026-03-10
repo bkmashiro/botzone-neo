@@ -69,6 +69,24 @@ describe('DataStoreService', () => {
       // After clear, calling getData on the same session object still works
       // (it reads from the now-deleted map, returning undefined → '')
     });
+
+    it('should truncate data exceeding 1MB limit', () => {
+      const session = service.createSession();
+      const largeData = 'x'.repeat(1024 * 1024 + 100);
+
+      session.setData('bot-1', largeData);
+
+      expect(session.getData('bot-1').length).toBe(1024 * 1024);
+    });
+
+    it('should allow data within 1MB limit', () => {
+      const session = service.createSession();
+      const data = 'x'.repeat(1024 * 1024);
+
+      session.setData('bot-1', data);
+
+      expect(session.getData('bot-1').length).toBe(1024 * 1024);
+    });
   });
 
   describe('onModuleInit / onModuleDestroy', () => {
@@ -173,6 +191,20 @@ describe('DataStoreService', () => {
       expect(mockedFs.writeFile).toHaveBeenCalledWith(
         expect.stringContaining('bot-1.json'),
         '{"global":true}',
+        'utf-8',
+      );
+    });
+
+    it('should truncate globaldata exceeding 1MB limit', async () => {
+      mockedFs.mkdir.mockResolvedValue(undefined);
+      mockedFs.writeFile.mockResolvedValue(undefined);
+
+      const largeData = 'y'.repeat(1024 * 1024 + 500);
+      await service.setGlobalData('bot-1', largeData);
+
+      expect(mockedFs.writeFile).toHaveBeenCalledWith(
+        expect.any(String),
+        'y'.repeat(1024 * 1024),
         'utf-8',
       );
     });
