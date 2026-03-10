@@ -125,6 +125,9 @@ export class JudgeController {
       this.validateUrl(String(callback['update']), 'callback.update');
     }
     for (const [id, code] of Object.entries(game as Record<string, Record<string, unknown>>)) {
+      if (!code['language'] || typeof code['language'] !== 'string') {
+        throw new BadRequestException(`${id}: 缺少 language`);
+      }
       if (!code['source'] || typeof code['source'] !== 'string') {
         throw new BadRequestException(`${id}: 缺少 source`);
       }
@@ -233,7 +236,9 @@ export class JudgeController {
     // IPv4 private ranges
     const ipv4Match = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
     if (ipv4Match) {
-      const [, a, b] = ipv4Match.map(Number);
+      const [, a, b, c, d] = ipv4Match.map(Number);
+      // Reject invalid octets (> 255)
+      if (a > 255 || b > 255 || c > 255 || d > 255) return true;
       if (a === 127) return true; // 127.0.0.0/8
       if (a === 10) return true; // 10.0.0.0/8
       if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12

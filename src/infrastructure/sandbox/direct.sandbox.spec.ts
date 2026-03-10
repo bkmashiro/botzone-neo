@@ -72,6 +72,21 @@ describe('DirectSandbox', () => {
     expect(result.exitCode).toBe(0);
   });
 
+  it('should reject when spawn fails (e.g. command not found)', async () => {
+    const req: SandboxRequest = {
+      compiled: {
+        cmd: '/nonexistent/binary_that_does_not_exist_xyz',
+        args: [],
+        language: 'test',
+        readonlyMounts: [],
+      },
+      workDir: '/tmp',
+      limit: { timeMs: 5000, memoryMb: 256 },
+    };
+
+    await expect(sandbox.execute(req)).rejects.toThrow();
+  });
+
   it('捕获 stderr', async () => {
     const req: SandboxRequest = {
       compiled: {

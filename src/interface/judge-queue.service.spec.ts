@@ -73,6 +73,21 @@ describe('JudgeQueueService', () => {
       expect(mockQueue.pause).toHaveBeenCalledWith(true);
       expect(mockQueue.close).toHaveBeenCalled();
     });
+
+    it('should log warning when close() rejects', async () => {
+      mockQueue.close.mockRejectedValueOnce(new Error('redis gone'));
+      await service.onApplicationShutdown('SIGTERM');
+      expect(mockQueue.pause).toHaveBeenCalledWith(true);
+    });
+
+    it('should resolve when close() takes longer than grace period', async () => {
+      jest.useFakeTimers();
+      mockQueue.close.mockReturnValueOnce(new Promise(() => {}));
+      const promise = service.onApplicationShutdown();
+      await jest.advanceTimersByTimeAsync(30_000);
+      await promise;
+      jest.useRealTimers();
+    });
   });
 
   describe('getJobStatus', () => {

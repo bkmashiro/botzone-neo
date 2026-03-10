@@ -232,4 +232,83 @@ describe('LongrunStrategy', () => {
       await expect(strategy.cleanup(mockBot)).resolves.toBeUndefined();
     });
   });
+
+  describe('signal failure', () => {
+    it('should handle kill() throwing (process already dead)', async () => {
+      const child = createMockChild();
+      mockSpawn.mockReturnValue(child);
+
+      (child.stdin as unknown as { write: jest.Mock }).write.mockImplementation(() => {
+        process.nextTick(() => {
+          child.stdout!.emit('data', Buffer.from('{"response":"ok"}\n'));
+        });
+        return true;
+      });
+      await strategy.runRound(mockBot, mockInput);
+
+      (child.kill as jest.Mock).mockImplementation(() => {
+        throw new Error('kill ESRCH');
+      });
+
+      await expect(strategy.afterRound(mockBot)).resolves.toBeUndefined();
+    });
+  });
+
+  describe('stdin non-EPIPE error', () => {
+    it('should re-throw non-EPIPE errors from stdin', async () => {
+      const child = createMockChild();
+      mockSpawn.mockReturnValue(child);
+
+      (child.stdin as unknown as { write: jest.Mock }).write.mockImplementation(() => {
+        process.nextTick(() => {
+          child.stdout!.emit('data', Buffer.from('{"response":"ok"}\n'));
+        });
+        return true;
+      });
+      await strategy.runRound(mockBot, mockInput);
+
+      const nonEpipeErr = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' });
+      expect(() => {
+        child.stdin!.emit('error', nonEpipeErr);
+      }).toThrow('ECONNRESET');
+    });
+
+    it('should swallow EPIPE errors from stdin', async () => {
+      const child = createMockChild();
+      mockSpawn.mockReturnValue(child);
+
+      (child.stdin as unknown as { write: jest.Mock }).write.mockImplementation(() => {
+        process.nextTick(() => {
+          child.stdout!.emit('data', Buffer.from('{"response":"ok"}\n'));
+        });
+        return true;
+      });
+      await strategy.runRound(mockBot, mockInput);
+
+      const epipeErr = Object.assign(new Error('EPIPE'), { code: 'EPIPE' });
+      expect(() => {
+        child.stdin!.emit('error', epipeErr);
+      }).not.toThrow();
+    });
+  });
+
+  describe('process error event', () => {
+    it('should mark process as exited on error event', async () => {
+      const child = createMockChild();
+      mockSpawn.mockReturnValue(child);
+
+      (child.stdin as unknown as { write: jest.Mock }).write.mockImplementation(() => {
+        process.nextTick(() => {
+          child.stdout!.emit('data', Buffer.from('{"response":"ok"}\n'));
+        });
+        return true;
+      });
+      await strategy.runRound(mockBot, mockInput);
+
+      child.emit('error', new Error('spawn EACCES'));
+
+      const output = await strategy.runRound(mockBot, mockInput);
+      expect(output.debug).toContain('进程已退出');
+    });
+  });
 });

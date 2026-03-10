@@ -118,6 +118,18 @@ describe('JudgeController', () => {
       await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
     });
 
+    it('should throw when language is missing on a bot', async () => {
+      const body = {
+        type: 'botzone',
+        game: {
+          judger: { source: 'code', limit: { time: 1000, memory: 256 } },
+        },
+        callback: { update: 'http://update', finish: 'http://finish' },
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
     it('should throw when source is missing on a bot', async () => {
       const body = {
         type: 'botzone',
@@ -367,6 +379,21 @@ describe('JudgeController', () => {
         memoryLimitMb: 256,
         testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
         callback: { finish: url },
+        judgeMode: 'standard',
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject IPs with invalid octets (>255)', async () => {
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
+        callback: { finish: 'http://172.16.999.999/callback' },
         judgeMode: 'standard',
       };
 

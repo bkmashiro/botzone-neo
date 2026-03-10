@@ -48,7 +48,9 @@ export class JudgeQueueService implements OnModuleInit, OnApplicationShutdown {
 
   async onApplicationShutdown(signal?: string): Promise<void> {
     this.logger.log(`收到关闭信号 (${signal ?? 'unknown'})，等待进行中的任务完成...`);
-    await this.judgeQueue.pause(true);
+    await this.judgeQueue.pause(true).catch((err) => {
+      this.logger.warn(`队列暂停异常: ${err}`);
+    });
 
     // 给运行中的任务最多 30 秒完成
     const GRACE_MS = 30_000;
