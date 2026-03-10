@@ -6,15 +6,15 @@ dev:
 
 # 本地构建
 build:
-	npm run build
+	pnpm run build
 
 # 测试
 test:
-	npm test
+	pnpm test
 
-# 类型检查
+# 类型检查 + Lint
 lint:
-	npm run lint
+	pnpm run lint
 
 # 生产 docker
 docker-up:
