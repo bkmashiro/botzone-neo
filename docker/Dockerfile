@@ -64,8 +64,8 @@ ARG WASMTIME_VERSION=v29.0.1
 RUN curl -sL "https://github.com/bytecodealliance/wasmtime/releases/download/${WASMTIME_VERSION}/wasmtime-${WASMTIME_VERSION}-x86_64-linux.tar.xz" \
     | tar -xJf - --strip-components=1 -C /usr/local/bin/ "wasmtime-${WASMTIME_VERSION}-x86_64-linux/wasmtime"
 
-# 安装全局 TypeScript（Bot 编译用）
-RUN npm install -g typescript
+# 安装全局 TypeScript（Bot 编译用，pin 到与项目一致的版本）
+RUN npm install -g typescript@5.9.3
 
 # 从 builder 复制 nsjail
 COPY --from=builder /usr/bin/nsjail /usr/bin/nsjail
