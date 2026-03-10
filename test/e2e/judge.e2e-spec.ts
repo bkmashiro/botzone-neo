@@ -14,6 +14,7 @@ import { JudgeController } from '../../src/interface/judge.controller';
 import { HealthController } from '../../src/interface/health.controller';
 import { JudgeQueueService } from '../../src/interface/judge-queue.service';
 import { AllExceptionsFilter } from '../../src/interface/all-exceptions.filter';
+import { RequestIdMiddleware } from '../../src/interface/request-id.middleware';
 
 describe('Judge API E2E', () => {
   let app: INestApplication;
@@ -45,6 +46,10 @@ describe('Judge API E2E', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
+    const middleware = new RequestIdMiddleware();
+    app.use((req: unknown, res: unknown, next: unknown) =>
+      middleware.use(req as never, res as never, next as never),
+    );
     app.useGlobalFilters(new AllExceptionsFilter());
     app.useGlobalPipes(
       new ValidationPipe({
@@ -579,5 +584,26 @@ describe('Judge API E2E', () => {
       type: 'botzone',
       task: expect.objectContaining({ runMode: 'longrun' }),
     });
+  });
+
+  // ── Request ID ──
+
+  it('应该在响应中返回客户端提供的 X-Request-ID', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/health')
+      .set('X-Request-ID', 'custom-req-id-123')
+      .expect(200);
+
+    expect(res.headers['x-request-id']).toBe('custom-req-id-123');
+  });
+
+  it('应该在未提供 X-Request-ID 时自动生成', async () => {
+    const res = await request(app.getHttpServer()).get('/health').expect(200);
+
+    expect(res.headers['x-request-id']).toBeDefined();
+    // UUID v4 format
+    expect(res.headers['x-request-id']).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
   });
 });
