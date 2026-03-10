@@ -24,6 +24,9 @@ services:
       start_period: 30s
     networks:
       - botzone-internal
+    volumes:
+      - judger-cache:/app/.cache
+      - judger-data:/app/.data
     # nsjail 需要特权模式
     privileged: true
     deploy:
@@ -56,6 +59,10 @@ services:
           memory: 512M
 
 volumes:
+  judger-cache:
+    name: botzone-judger-cache
+  judger-data:
+    name: botzone-judger-data
   redis-data:
     name: botzone-redis-data
 

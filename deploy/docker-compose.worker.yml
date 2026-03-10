@@ -1,0 +1,73 @@
+# =============================================================================
+# Server 2..N (Worker Node) — Botzone-Neo Worker Only
+# 无状态水平扩展，连接 Server 1 的 Redis 队列
+#
+# 使用方法：
+#   cp deploy/.env.worker.example .env
+#   编辑 .env，填写 REDIS_HOST（Server 1 的 Tailscale IP）等
+#   docker compose -f deploy/docker-compose.worker.yml up -d
+#
+# 扩容：在任意新服务器重复上述步骤即可，无需修改 Server 1 配置。
+# =============================================================================
+
+services:
+
+  botzone-neo:
+    image: ${BOTZONE_IMAGE:-botzone-neo:latest}
+    # 如果没有预构建镜像，使用 build 代替 image：
+    # build:
+    #   context: .
+    #   dockerfile: docker/Dockerfile
+    container_name: botzone-neo-worker
+    restart: unless-stopped
+    ports:
+      # Worker 节点 HTTP API 端口（可选，用于直连测试）
+      - "${PORT:-3001}:3001"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      # Redis 指向 Server 1（通过 Tailscale/VPN）
+      REDIS_HOST: ${REDIS_HOST}     # Server 1 的 Tailscale IP，例如 100.x.x.x
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      SANDBOX_BACKEND: nsjail
+      # Worker 节点不作为回调入口，BOTZONE_CALLBACK_URL 指向 Server 1 的 leverage-backend
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:3001/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - botzone-worker
+    volumes:
+      - botzone_cache:/app/.cache
+      - botzone_data:/app/.data
+    # nsjail 需要特权模式
+    privileged: true
+    deploy:
+      resources:
+        limits:
+          cpus: "${WORKER_CPU_LIMIT:-4}"
+          memory: "${WORKER_MEM_LIMIT:-4G}"
+        reservations:
+          cpus: "1"
+          memory: 512M
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  botzone_cache:
+    name: botzone-neo-cache
+  botzone_data:
+    name: botzone-neo-data
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  botzone-worker:
+    name: botzone-worker
+    driver: bridge

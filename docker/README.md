@@ -44,7 +44,7 @@ make docker-up
 - judger 以 `privileged` 模式运行（nsjail 需要 namespace 权限）
 - 生产环境网络设为 `internal: true`，不暴露 Redis 端口
 - nsjail 将 Bot 进程降权到 `nobody` (uid 65534)
-- 通过 `TRUST_IP` 限制允许提交任务的来源 IP
+- 建议通过网络层（防火墙 / 反向代理）限制允许提交任务的来源 IP
 
 ## nsjail 配置
 

@@ -61,10 +61,11 @@ export class JudgeQueueService implements OnModuleInit, OnApplicationShutdown {
       this.logger.warn(`队列关闭异常: ${err}`);
     });
     const timeoutPromise = new Promise<void>((resolve) => {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         this.logger.warn('队列关闭超时，强制退出');
         resolve();
       }, GRACE_MS);
+      timer.unref();
     });
     await Promise.race([closePromise, timeoutPromise]);
 

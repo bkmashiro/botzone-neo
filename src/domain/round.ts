@@ -16,13 +16,3 @@ export interface JudgeCommand {
   /** 初始数据（仅首轮裁判输出时使用） */
   initdata?: string | object;
 }
-
-/** 一轮回合的记录 */
-export interface RoundRecord {
-  /** 回合编号（从 1 开始） */
-  roundNumber: number;
-  /** 裁判输出 */
-  judgeCommand: JudgeCommand;
-  /** 各 Bot 本轮的响应 */
-  botResponses: Record<string, string>;
-}

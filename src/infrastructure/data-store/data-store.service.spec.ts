@@ -15,33 +15,6 @@ describe('DataStoreService', () => {
     jest.clearAllMocks();
   });
 
-  describe('getData / setData (in-memory)', () => {
-    it('should return empty string for unknown botId', async () => {
-      expect(await service.getData('unknown')).toBe('');
-    });
-
-    it('should store and retrieve data', async () => {
-      await service.setData('bot-1', '{"state":1}');
-      expect(await service.getData('bot-1')).toBe('{"state":1}');
-    });
-
-    it('should overwrite existing data', async () => {
-      await service.setData('bot-1', 'old');
-      await service.setData('bot-1', 'new');
-      expect(await service.getData('bot-1')).toBe('new');
-    });
-  });
-
-  describe('clearSessionData', () => {
-    it('should clear all in-memory data', async () => {
-      await service.setData('bot-1', 'data1');
-      await service.setData('bot-2', 'data2');
-      service.clearSessionData();
-      expect(await service.getData('bot-1')).toBe('');
-      expect(await service.getData('bot-2')).toBe('');
-    });
-  });
-
   describe('createSession', () => {
     it('should create an isolated session scope', () => {
       const session = service.createSession();

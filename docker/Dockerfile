@@ -54,10 +54,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 nlohmann/json 头文件（C++ Bot 依赖）
+# 安装 nlohmann/json 头文件（C++ Bot 依赖，带 SHA-256 校验）
 RUN mkdir -p /usr/local/include/nlohmann \
-    && curl -sL https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp \
-       -o /usr/local/include/nlohmann/json.hpp
+    && curl -sfL https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp \
+       -o /usr/local/include/nlohmann/json.hpp \
+    && echo "9bea4c8066ef4a1c206b2be5a36302f8926f7fdc6087af5d20b417d0cf103ea6  /usr/local/include/nlohmann/json.hpp" \
+       | sha256sum -c -
 
 # 安装全局 TypeScript（Bot 编译用，pin 到与项目一致的版本）
 RUN npm install -g typescript@5.9.3

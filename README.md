@@ -266,9 +266,23 @@ docker/                      # Docker 相关配置
 | `MAX_MATCH_DURATION_MS` | `300000` | 单场对局最大时长（毫秒） |
 | `SANDBOX_BACKEND` | `nsjail` | 沙箱后端：`nsjail`（生产）/ `direct`（开发） |
 | `NSJAIL_PATH` | `/usr/bin/nsjail` | nsjail 二进制路径 |
-| `TRUST_IP` | `127.0.0.1` | 允许提交评测任务的 IP（逗号分隔） |
 | `CORS_ORIGIN` | `*` | CORS 允许的来源（`*` 或具体域名） |
 | `OTEL_ENABLED` | `false` | 启用 OpenTelemetry 追踪 |
+
+## 生产部署
+
+生产环境支持单节点和多服务器水平扩展两种模式，完整部署指南见：
+
+📖 **[deploy/README.md](./deploy/README.md)**
+
+**快速概览：**
+- `deploy/docker-compose.server1.yml` — Server 1（控制节点，含全栈服务 + Redis + 内置 Worker）
+- `deploy/docker-compose.worker.yml` — Server 2..N（无状态 Worker 节点，水平扩展）
+- `deploy/.env.server1.example` — Server 1 环境变量模板
+- `deploy/.env.worker.example` — Worker 环境变量模板
+- `deploy/SECURITY.md` — 安全加固指南（Redis 认证、回调 Token 轮换、网络隔离）
+
+---
 
 ## 评测结果（Verdict）
 

@@ -215,7 +215,6 @@ The judger program communicates with bots via stdin/stdout JSON:
 | `MAX_MATCH_DURATION_MS` | 300000 | Max game duration (5 min) |
 | `CALLBACK_TIMEOUT_MS` | 5000 | Callback HTTP timeout |
 | `CALLBACK_RETRY_COUNT` | 3 | Callback retry attempts |
-| `TRUST_IP` | 127.0.0.1 | Comma-separated allowed submitter IPs |
 | `NODE_ENV` | development | `production` disables Swagger |
 
 ---
@@ -277,7 +276,7 @@ docker-compose exec botzone curl http://localhost:3001/health
 
 For production, ensure:
 - `NODE_ENV=production` (disables Swagger)
-- `TRUST_IP` set to your judge-caller IP range
+- Network-level IP restrictions (firewall / reverse proxy)
 - `SANDBOX_BACKEND=nsjail` (Linux only, requires nsjail installed)
 - Redis persistence configured
 - Resource limits reviewed in `docker-compose.yml`

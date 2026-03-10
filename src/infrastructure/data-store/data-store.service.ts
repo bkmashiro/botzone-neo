@@ -38,9 +38,6 @@ export class DataStoreService implements OnModuleInit, OnModuleDestroy {
   /** 所有活跃会话 */
   private readonly sessions: Map<string, Map<string, string>> = new Map();
 
-  /** 向后兼容：全局 dataMap（已废弃，请使用 createSession） */
-  private readonly dataMap: Map<string, string> = new Map();
-
   constructor() {
     this.baseDir = path.join(process.cwd(), '.data', 'globaldata');
   }
@@ -79,16 +76,6 @@ export class DataStoreService implements OnModuleInit, OnModuleDestroy {
         this.sessions.delete(id);
       },
     };
-  }
-
-  /** 获取本局持久化数据 */
-  async getData(botId: string): Promise<string> {
-    return this.dataMap.get(botId) ?? '';
-  }
-
-  /** 设置本局持久化数据 */
-  async setData(botId: string, data: string): Promise<void> {
-    this.dataMap.set(botId, data);
   }
 
   /** 获取安全的文件路径（防止路径遍历） */
@@ -135,11 +122,6 @@ export class DataStoreService implements OnModuleInit, OnModuleDestroy {
     const filePath = this.safePath(botId);
     await fs.writeFile(filePath, data, 'utf-8');
     this.logger.debug(`全局数据已保存: ${botId}`);
-  }
-
-  /** 清除本局数据（对局结束时调用） */
-  clearSessionData(): void {
-    this.dataMap.clear();
   }
 
   /** 清理所有过期的 globaldata 文件 */
