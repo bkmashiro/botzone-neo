@@ -9,11 +9,14 @@ import { JudgeQueueService } from './judge-queue.service';
 import { MatchTask } from '../domain/match';
 import { BotSpec } from '../domain/bot';
 import { OJTask } from '../domain/oj/testcase';
-
-/** 单个 source 最大长度（64KB） */
-const MAX_SOURCE_LENGTH = 65536;
-/** 内存上限（MB） */
-const MAX_MEMORY_MB = 2048;
+import {
+  MAX_SOURCE_LENGTH,
+  MIN_TIME_LIMIT_MS,
+  MAX_TIME_LIMIT_MS,
+  MIN_MEMORY_LIMIT_MB,
+  MAX_MEMORY_LIMIT_MB,
+  MAX_TESTCASE_LENGTH,
+} from './dto/task.dto';
 
 @Controller('v1/judge')
 export class JudgeController {
@@ -21,7 +24,9 @@ export class JudgeController {
 
   @Post()
   @HttpCode(202)
-  async submitTask(@Body() body: Record<string, unknown>) {
+  async submitTask(
+    @Body() body: Record<string, unknown>,
+  ): Promise<{ message: string; jobId: string }> {
     const type = body['type'] as string;
 
     if (type === 'botzone') {
@@ -62,11 +67,23 @@ export class JudgeController {
       if (!limit || typeof limit !== 'object') {
         throw new BadRequestException(`${id}: 缺少 limit`);
       }
-      if (typeof limit['time'] !== 'number' || limit['time'] < 1) {
-        throw new BadRequestException(`${id}: time_limit 必须 >= 1ms`);
+      if (
+        typeof limit['time'] !== 'number' ||
+        limit['time'] < MIN_TIME_LIMIT_MS ||
+        limit['time'] > MAX_TIME_LIMIT_MS
+      ) {
+        throw new BadRequestException(
+          `${id}: time_limit 必须在 ${MIN_TIME_LIMIT_MS}~${MAX_TIME_LIMIT_MS}ms`,
+        );
       }
-      if (typeof limit['memory'] !== 'number' || limit['memory'] > MAX_MEMORY_MB) {
-        throw new BadRequestException(`${id}: memory_limit 不能超过 ${MAX_MEMORY_MB}MB`);
+      if (
+        typeof limit['memory'] !== 'number' ||
+        limit['memory'] < MIN_MEMORY_LIMIT_MB ||
+        limit['memory'] > MAX_MEMORY_LIMIT_MB
+      ) {
+        throw new BadRequestException(
+          `${id}: memory_limit 必须在 ${MIN_MEMORY_LIMIT_MB}~${MAX_MEMORY_LIMIT_MB}MB`,
+        );
       }
     }
   }
@@ -83,15 +100,38 @@ export class JudgeController {
       throw new BadRequestException('缺少 language');
     }
     const timeLimitMs = body['timeLimitMs'];
-    if (typeof timeLimitMs !== 'number' || timeLimitMs < 1) {
-      throw new BadRequestException('timeLimitMs 必须 >= 1');
+    if (
+      typeof timeLimitMs !== 'number' ||
+      timeLimitMs < MIN_TIME_LIMIT_MS ||
+      timeLimitMs > MAX_TIME_LIMIT_MS
+    ) {
+      throw new BadRequestException(
+        `timeLimitMs 必须在 ${MIN_TIME_LIMIT_MS}~${MAX_TIME_LIMIT_MS}ms`,
+      );
     }
     const memoryLimitMb = body['memoryLimitMb'];
-    if (typeof memoryLimitMb !== 'number' || memoryLimitMb > MAX_MEMORY_MB) {
-      throw new BadRequestException(`memoryLimitMb 不能超过 ${MAX_MEMORY_MB}MB`);
+    if (
+      typeof memoryLimitMb !== 'number' ||
+      memoryLimitMb < MIN_MEMORY_LIMIT_MB ||
+      memoryLimitMb > MAX_MEMORY_LIMIT_MB
+    ) {
+      throw new BadRequestException(
+        `memoryLimitMb 必须在 ${MIN_MEMORY_LIMIT_MB}~${MAX_MEMORY_LIMIT_MB}MB`,
+      );
     }
     if (!Array.isArray(body['testcases']) || body['testcases'].length === 0) {
       throw new BadRequestException('缺少 testcases');
+    }
+    for (const tc of body['testcases'] as Array<Record<string, unknown>>) {
+      if (typeof tc['input'] === 'string' && tc['input'].length > MAX_TESTCASE_LENGTH) {
+        throw new BadRequestException(`testcase ${tc['id']}: input 超过 10MB 限制`);
+      }
+      if (
+        typeof tc['expectedOutput'] === 'string' &&
+        tc['expectedOutput'].length > MAX_TESTCASE_LENGTH
+      ) {
+        throw new BadRequestException(`testcase ${tc['id']}: expectedOutput 超过 10MB 限制`);
+      }
     }
     const callback = body['callback'] as Record<string, unknown> | undefined;
     if (!callback || !callback['finish']) {
