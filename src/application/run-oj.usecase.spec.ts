@@ -17,6 +17,8 @@ import { CallbackService } from '../infrastructure/callback/callback.service';
 const mockCompileService = { compile: jest.fn() };
 const mockCallbackService = { finish: jest.fn() };
 const mockSandbox = { execute: jest.fn() };
+const mockCounter = { inc: jest.fn() };
+const mockHistogram = { observe: jest.fn() };
 
 const compiledBot: CompiledBot = {
   cmd: 'test',
@@ -75,6 +77,8 @@ describe('RunOJUseCase', () => {
       mockCompileService as unknown as CompileService,
       mockCallbackService as unknown as CallbackService,
       mockSandbox as unknown as ISandbox,
+      mockCounter as never,
+      mockHistogram as never,
     );
   });
 

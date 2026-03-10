@@ -21,6 +21,7 @@ interface ErrorResponse {
   message: string;
   timestamp: string;
   path: string;
+  requestId?: string;
 }
 
 @Catch()
@@ -65,6 +66,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message,
       timestamp: new Date().toISOString(),
       path: request.url,
+      requestId: request.headers['x-request-id'] as string,
     };
 
     response.status(statusCode).json(body);

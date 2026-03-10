@@ -10,7 +10,6 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bull';
 import {
-  PrometheusModule,
   makeCounterProvider,
   makeHistogramProvider,
   makeGaugeProvider,
@@ -34,11 +33,7 @@ import { DirectSandbox } from '../infrastructure/sandbox/direct.sandbox';
 import { NsjailSandbox } from '../infrastructure/sandbox/nsjail.sandbox';
 
 @Module({
-  imports: [
-    ConfigModule,
-    BullModule.registerQueue({ name: JUDGE_QUEUE }),
-    PrometheusModule.register(),
-  ],
+  imports: [ConfigModule, BullModule.registerQueue({ name: JUDGE_QUEUE })],
   controllers: [JudgeController, HealthController],
   providers: [
     // 队列服务

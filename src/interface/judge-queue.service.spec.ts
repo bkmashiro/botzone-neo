@@ -25,6 +25,9 @@ describe('JudgeQueueService', () => {
   const mockQueue: Record<string, jest.Mock> = {
     add: jest.fn().mockResolvedValue({ id: 'job-123' }),
     process: jest.fn(),
+    pause: jest.fn().mockResolvedValue(undefined),
+    close: jest.fn().mockResolvedValue(undefined),
+    getJob: jest.fn(),
   };
   const mockRunMatch = { execute: jest.fn().mockResolvedValue(undefined) };
   const mockRunOJ = { execute: jest.fn().mockResolvedValue(undefined) };
@@ -60,6 +63,60 @@ describe('JudgeQueueService', () => {
         timeout: 10 * 60 * 1000,
       });
       expect(result).toBe('job-123');
+    });
+  });
+
+  describe('onApplicationShutdown', () => {
+    it('should pause and close the queue', async () => {
+      await service.onApplicationShutdown();
+
+      expect(mockQueue.pause).toHaveBeenCalledWith(true);
+      expect(mockQueue.close).toHaveBeenCalled();
+    });
+  });
+
+  describe('getJobStatus', () => {
+    it('should return null when the job does not exist', async () => {
+      mockQueue.getJob.mockResolvedValueOnce(null);
+
+      await expect(service.getJobStatus('missing')).resolves.toBeNull();
+    });
+
+    it('should return job details without optional fields when absent', async () => {
+      mockQueue.getJob.mockResolvedValueOnce({
+        id: 'job-5',
+        data: { type: 'botzone' },
+        finishedOn: undefined,
+        failedReason: undefined,
+        getState: jest.fn().mockResolvedValue('active'),
+      });
+
+      const result = await service.getJobStatus('job-5');
+      expect(result).toEqual({
+        jobId: 'job-5',
+        state: 'active',
+        type: 'botzone',
+      });
+      expect(result).not.toHaveProperty('finishedOn');
+      expect(result).not.toHaveProperty('failedReason');
+    });
+
+    it('should return job details when the job exists', async () => {
+      mockQueue.getJob.mockResolvedValueOnce({
+        id: 'job-9',
+        data: { type: 'oj' },
+        finishedOn: 1700000000000,
+        failedReason: 'timeout',
+        getState: jest.fn().mockResolvedValue('failed'),
+      });
+
+      await expect(service.getJobStatus('job-9')).resolves.toEqual({
+        jobId: 'job-9',
+        state: 'failed',
+        type: 'oj',
+        finishedOn: new Date(1700000000000).toISOString(),
+        failedReason: 'timeout',
+      });
     });
   });
 

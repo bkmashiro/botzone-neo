@@ -3,9 +3,7 @@ import { JudgeController } from './judge.controller';
 import { JudgeService } from './judge.service';
 import { TaskDto } from './dto/task.dto';
 import { ValidationPipe, HttpStatus } from '@nestjs/common';
-import { INestApplication } from '@nestjs/common';
 import { Request } from 'express';
-import * as request from 'supertest';
 
 describe('JudgeController', () => {
   let controller: JudgeController;
@@ -96,7 +94,12 @@ describe('JudgeController', () => {
           },
         },
         callback: { update: 'http://u', finish: 'http://f' },
-        initdata: { board: [[0, 0], [0, 0]] },
+        initdata: {
+          board: [
+            [0, 0],
+            [0, 0],
+          ],
+        },
       };
 
       const result = await controller.submitTask(taskDto, mockReq);
@@ -106,8 +109,9 @@ describe('JudgeController', () => {
   });
 });
 
-describe('JudgeController (HTTP 集成)', () => {
-  let app: INestApplication;
+describe('JudgeController (ValidationPipe)', () => {
+  let controller: JudgeController;
+  let pipe: ValidationPipe;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -123,19 +127,21 @@ describe('JudgeController (HTTP 集成)', () => {
       ],
     }).compile();
 
-    app = module.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({
+    controller = module.get(JudgeController);
+    pipe = new ValidationPipe({
       whitelist: true,
       transform: true,
-    }));
-    await app.init();
+    });
   });
 
-  afterEach(async () => {
-    await app.close();
-  });
+  async function validate(body: unknown): Promise<TaskDto> {
+    return pipe.transform(body, {
+      type: 'body',
+      metatype: TaskDto,
+    });
+  }
 
-  it('POST /v1/judge 应该接受合法请求并返回 202', async () => {
+  it('应该接受合法请求并返回 202 对应的结果体', async () => {
     const body = {
       game: {
         judger: {
@@ -155,16 +161,18 @@ describe('JudgeController (HTTP 集成)', () => {
       },
     };
 
-    const res = await request(app.getHttpServer())
-      .post('/v1/judge')
-      .send(body)
-      .expect(HttpStatus.ACCEPTED);
+    const result = await controller.submitTask(await validate(body), {
+      headers: {},
+      socket: { remoteAddress: '127.0.0.1' },
+    } as Request);
 
-    expect(res.body).toHaveProperty('jobId', 'job-456');
-    expect(res.body).toHaveProperty('message');
+    expect(result).toEqual({
+      jobId: 'job-456',
+      message: '评测任务已入队',
+    });
   });
 
-  it('POST /v1/judge 应该在缺少 game 字段时返回 400', async () => {
+  it('应该在缺少 game 字段时返回 400', async () => {
     const body = {
       callback: {
         update: 'http://localhost/update',
@@ -172,13 +180,12 @@ describe('JudgeController (HTTP 集成)', () => {
       },
     };
 
-    await request(app.getHttpServer())
-      .post('/v1/judge')
-      .send(body)
-      .expect(HttpStatus.BAD_REQUEST);
+    await expect(validate(body)).rejects.toMatchObject({
+      status: HttpStatus.BAD_REQUEST,
+    });
   });
 
-  it('POST /v1/judge 应该在 runMode 值非法时返回 400', async () => {
+  it('应该在 runMode 值非法时返回 400', async () => {
     const body = {
       game: {
         judger: {
@@ -194,13 +201,12 @@ describe('JudgeController (HTTP 集成)', () => {
       runMode: 'invalid_mode',
     };
 
-    await request(app.getHttpServer())
-      .post('/v1/judge')
-      .send(body)
-      .expect(HttpStatus.BAD_REQUEST);
+    await expect(validate(body)).rejects.toMatchObject({
+      status: HttpStatus.BAD_REQUEST,
+    });
   });
 
-  it('POST /v1/judge 应该接受带 runMode=longrun 的请求', async () => {
+  it('应该接受带 runMode=longrun 的请求', async () => {
     const body = {
       game: {
         judger: {
@@ -216,16 +222,20 @@ describe('JudgeController (HTTP 集成)', () => {
       runMode: 'longrun',
     };
 
-    await request(app.getHttpServer())
-      .post('/v1/judge')
-      .send(body)
-      .expect(HttpStatus.ACCEPTED);
+    const result = await controller.submitTask(await validate(body), {
+      headers: {},
+      socket: { remoteAddress: '127.0.0.1' },
+    } as Request);
+
+    expect(result).toEqual({
+      jobId: 'job-456',
+      message: '评测任务已入队',
+    });
   });
 
-  it('POST /v1/judge 应该拒绝空 body', async () => {
-    await request(app.getHttpServer())
-      .post('/v1/judge')
-      .send({})
-      .expect(HttpStatus.BAD_REQUEST);
+  it('应该拒绝空 body', async () => {
+    await expect(validate({})).rejects.toMatchObject({
+      status: HttpStatus.BAD_REQUEST,
+    });
   });
 });

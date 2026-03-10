@@ -4,6 +4,7 @@
 
 import * as domain from './domain';
 import * as domainOj from './domain/oj';
+import * as application from './application';
 import * as infraCompile from './infrastructure/compile';
 import * as infraSandbox from './infrastructure/sandbox';
 import * as strategies from './strategies';
@@ -18,6 +19,11 @@ describe('barrel exports', () => {
 
   it('domain/oj exports expected symbols', () => {
     expect(domainOj).toBeDefined();
+  });
+
+  it('application exports use cases', () => {
+    expect(application.RunMatchUseCase).toBeDefined();
+    expect(application.RunOJUseCase).toBeDefined();
   });
 
   it('infrastructure/compile exports CompileService', () => {

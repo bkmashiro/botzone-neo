@@ -2,13 +2,14 @@
  * AppModule — 应用根模块（新架构）
  */
 
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bull';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import { JudgeModule } from './judge.module';
+import { RequestIdMiddleware } from './request-id.middleware';
 
 @Module({
   imports: [
@@ -47,4 +48,8 @@ import { JudgeModule } from './judge.module';
     JudgeModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestIdMiddleware).forRoutes('*');
+  }
+}

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bull';
 import { LoggerModule } from 'nestjs-pino';
+import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import { JudgeModule } from './interface/judge.module';
 
 /**
@@ -33,6 +34,9 @@ import { JudgeModule } from './interface/judge.module';
         },
       }),
     }),
+
+    // Prometheus /metrics 端点
+    PrometheusModule.register(),
 
     // 评测模块
     JudgeModule,

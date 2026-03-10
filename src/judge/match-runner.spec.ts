@@ -1,10 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Logger } from '@nestjs/common';
 import { MatchRunner } from './match-runner';
 import { CompileService } from '../compile/compile.service';
 import { CallbackService } from '../callback/callback.service';
 import { DataStoreService } from '../data-store/data-store.service';
 import { NsjailService } from '../sandbox/nsjail.service';
 import { Task, GameResult, JudgeOutput } from './types';
+import { LongrunStrategy } from '../strategy/longrun.strategy';
+import { RestartStrategy } from '../strategy/restart.strategy';
 import * as fs from 'fs/promises';
 import * as child_process from 'child_process';
 import { ChildProcess } from 'child_process';
@@ -343,6 +346,181 @@ describe('MatchRunner', () => {
         '/tmp/botzone-test',
         expect.objectContaining({ recursive: true, force: true }),
       );
+    });
+
+    it('应该在临时目录清理失败时记录警告', async () => {
+      compileService.compile.mockResolvedValue({
+        verdict: 'OK',
+        execCmd: '/tmp/test/main',
+        execArgs: [],
+      });
+      (fs.rm as jest.Mock).mockRejectedValueOnce(new Error('cleanup failed'));
+      const loggerWarn = jest.spyOn((runner as unknown as { logger: Logger }).logger, 'warn');
+
+      const judgeOut: JudgeOutput = {
+        command: 'finish',
+        content: { '0': 1 },
+        display: '',
+      };
+      mockSpawn.mockReturnValue(
+        createFakeChild(0, JSON.stringify({ response: JSON.stringify(judgeOut) })),
+      );
+
+      await runner.run(makeSimpleTask());
+
+      expect(loggerWarn).toHaveBeenCalledWith(
+        expect.stringContaining('临时目录清理失败: /tmp/botzone-test'),
+      );
+    });
+  });
+
+  describe('未覆盖分支', () => {
+    function makeFakeStrategy(outputs: Array<Record<string, unknown>>) {
+      return {
+        runRound: jest
+          .fn()
+          .mockImplementation(() => Promise.resolve(outputs.shift() as Record<string, unknown>)),
+        afterRound: jest.fn().mockResolvedValue(undefined),
+        cleanup: jest.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    it('应该在缺少 judger 时按异常结束并给所有 bot 记 0 分', async () => {
+      const task = makeSimpleTask({
+        game: {
+          '0': {
+            language: 'cpp',
+            source: '// bot code',
+            limit: { time: 1000, memory: 256 },
+          },
+        },
+      });
+      const strategy = makeFakeStrategy([]);
+      jest
+        .spyOn(runner as never as { createStrategy: (mode: string) => unknown }, 'createStrategy')
+        .mockReturnValue(strategy);
+      compileService.compile.mockResolvedValue({
+        verdict: 'OK',
+        execCmd: '/tmp/test/main',
+        execArgs: [],
+      });
+
+      await runner.run(task);
+
+      expect(callbackService.finish).toHaveBeenCalledWith(
+        task.callback.finish,
+        expect.objectContaining({
+          scores: { '0': 0 },
+        }),
+      );
+    });
+
+    it('应该在裁判返回 verdict 错误时记录日志并异常结束', async () => {
+      const strategy = makeFakeStrategy([{ response: 'ignored', verdict: 'RE', debug: 'boom' }]);
+      jest
+        .spyOn(runner as never as { createStrategy: (mode: string) => unknown }, 'createStrategy')
+        .mockReturnValue(strategy);
+      compileService.compile.mockResolvedValue({
+        verdict: 'OK',
+        execCmd: '/tmp/test/main',
+        execArgs: [],
+      });
+
+      await runner.run(makeSimpleTask());
+
+      const result: GameResult = callbackService.finish.mock.calls[0][1];
+      expect(result.log).toContainEqual({
+        judge: { error: 'RE', debug: 'boom' },
+      });
+    });
+
+    it('应该在裁判没有输出时按异常结束', async () => {
+      const strategy = makeFakeStrategy([{ response: '' }]);
+      jest
+        .spyOn(runner as never as { createStrategy: (mode: string) => unknown }, 'createStrategy')
+        .mockReturnValue(strategy);
+      compileService.compile.mockResolvedValue({
+        verdict: 'OK',
+        execCmd: '/tmp/test/main',
+        execArgs: [],
+      });
+
+      await runner.run(makeSimpleTask());
+
+      expect(callbackService.finish).toHaveBeenCalledWith(
+        'http://localhost/finish',
+        expect.objectContaining({ scores: { '0': 0 } }),
+      );
+    });
+
+    it('应该在裁判输出非法 JSON 时保存 data 并按异常结束', async () => {
+      const strategy = makeFakeStrategy([{ response: '{bad json', data: 'judge-state' }]);
+      jest
+        .spyOn(runner as never as { createStrategy: (mode: string) => unknown }, 'createStrategy')
+        .mockReturnValue(strategy);
+      compileService.compile.mockResolvedValue({
+        verdict: 'OK',
+        execCmd: '/tmp/test/main',
+        execArgs: [],
+      });
+
+      await runner.run(makeSimpleTask());
+
+      expect(dataStoreService.setData).toHaveBeenCalledWith('judger', 'judge-state');
+      const result: GameResult = callbackService.finish.mock.calls[0][1];
+      expect(result.log).toContainEqual({
+        judge: { error: 'INVALID_JSON', raw: '{bad json' },
+      });
+    });
+
+    it('应该跳过 judger 和不存在的 bot，并记录 bot 运行错误', async () => {
+      const strategy = makeFakeStrategy([
+        {
+          response: JSON.stringify({
+            command: 'request',
+            content: { judger: 'skip', '0': 'play', ghost: 'missing' },
+            display: 'round 1',
+          }),
+        },
+        { response: 'move-a1', verdict: 'TLE', debug: 'slow' },
+        {
+          response: JSON.stringify({
+            command: 'finish',
+            content: { '0': 1 },
+            display: 'done',
+          }),
+        },
+      ]);
+      const loggerWarn = jest.spyOn((runner as unknown as { logger: Logger }).logger, 'warn');
+      jest
+        .spyOn(runner as never as { createStrategy: (mode: string) => unknown }, 'createStrategy')
+        .mockReturnValue(strategy);
+      compileService.compile.mockResolvedValue({
+        verdict: 'OK',
+        execCmd: '/tmp/test/main',
+        execArgs: [],
+      });
+
+      await runner.run(makeSimpleTask());
+
+      expect(callbackService.update).toHaveBeenCalledWith('http://localhost/update', {
+        round: 1,
+        display: 'round 1',
+      });
+      expect(loggerWarn).toHaveBeenCalledWith(expect.stringContaining('Bot 0 运行异常: TLE'));
+    });
+
+    it('应该按运行模式创建对应策略', () => {
+      expect(
+        (runner as never as { createStrategy: (mode: string) => unknown }).createStrategy(
+          'longrun',
+        ),
+      ).toBeInstanceOf(LongrunStrategy);
+      expect(
+        (runner as never as { createStrategy: (mode: string) => unknown }).createStrategy(
+          'restart',
+        ),
+      ).toBeInstanceOf(RestartStrategy);
     });
   });
 });
