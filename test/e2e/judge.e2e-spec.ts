@@ -16,6 +16,7 @@ import { JudgeQueueService } from '../../src/interface/judge-queue.service';
 describe('Judge API E2E', () => {
   let app: INestApplication;
   let mockEnqueue: jest.Mock;
+  let mockGetJobStatus: jest.Mock;
 
   const mockQueue = {
     client: { ping: jest.fn().mockResolvedValue('PONG') },
@@ -24,12 +25,16 @@ describe('Judge API E2E', () => {
 
   beforeEach(async () => {
     mockEnqueue = jest.fn().mockResolvedValue('test-job-1');
+    mockGetJobStatus = jest.fn();
 
     const moduleRef = await Test.createTestingModule({
       imports: [ConfigModule.forRoot({ isGlobal: true })],
       controllers: [JudgeController, HealthController],
       providers: [
-        { provide: JudgeQueueService, useValue: { enqueue: mockEnqueue } },
+        {
+          provide: JudgeQueueService,
+          useValue: { enqueue: mockEnqueue, getJobStatus: mockGetJobStatus },
+        },
         { provide: 'BullQueue_judge', useValue: mockQueue },
       ],
     }).compile();
@@ -235,5 +240,29 @@ describe('Judge API E2E', () => {
       .expect(400);
 
     expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
+  // ── 任务状态查询 ──
+
+  it('GET /v1/judge/:jobId/status → 200 + 任务状态', async () => {
+    mockGetJobStatus.mockResolvedValue({
+      jobId: 'job-42',
+      state: 'completed',
+      type: 'botzone',
+      finishedOn: '2026-03-10T00:00:00.000Z',
+    });
+
+    const res = await request(app.getHttpServer()).get('/v1/judge/job-42/status').expect(200);
+
+    expect(res.body.jobId).toBe('job-42');
+    expect(res.body.state).toBe('completed');
+    expect(res.body.type).toBe('botzone');
+    expect(mockGetJobStatus).toHaveBeenCalledWith('job-42');
+  });
+
+  it('GET /v1/judge/:jobId/status → 404 不存在的任务', async () => {
+    mockGetJobStatus.mockResolvedValue(null);
+
+    await request(app.getHttpServer()).get('/v1/judge/nonexistent/status').expect(404);
   });
 });

@@ -4,7 +4,17 @@
  * POST /v1/judge — 统一入口，按 task.type 分发到 Botzone 或 OJ 用例
  */
 
-import { Controller, Post, Body, HttpCode, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  HttpCode,
+  BadRequestException,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JudgeQueueService } from './judge-queue.service';
 import { MatchTask } from '../domain/match';
@@ -25,6 +35,36 @@ export class JudgeController {
   private readonly logger = new Logger(JudgeController.name);
 
   constructor(private readonly judgeQueue: JudgeQueueService) {}
+
+  @Get(':jobId/status')
+  @ApiOperation({ summary: '查询任务状态' })
+  @ApiResponse({
+    status: 200,
+    description: '任务状态',
+    schema: {
+      properties: {
+        jobId: { type: 'string' },
+        state: { type: 'string', enum: ['waiting', 'active', 'completed', 'failed', 'delayed'] },
+        type: { type: 'string', enum: ['botzone', 'oj'] },
+        finishedOn: { type: 'string', format: 'date-time' },
+        failedReason: { type: 'string' },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: '任务不存在' })
+  async getJobStatus(@Param('jobId') jobId: string): Promise<{
+    jobId: string;
+    state: string;
+    type?: string;
+    finishedOn?: string;
+    failedReason?: string;
+  }> {
+    const status = await this.judgeQueue.getJobStatus(jobId);
+    if (!status) {
+      throw new NotFoundException(`任务 ${jobId} 不存在`);
+    }
+    return status;
+  }
 
   @Post()
   @HttpCode(202)

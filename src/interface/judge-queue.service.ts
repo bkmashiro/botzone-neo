@@ -9,7 +9,7 @@
  * - Job TTL: 10 分钟（超时自动失败）
  */
 
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnApplicationShutdown } from '@nestjs/common';
 import { InjectQueue, Processor } from '@nestjs/bull';
 import { ConfigService } from '@nestjs/config';
 import { Job, Queue } from 'bull';
@@ -30,7 +30,7 @@ interface JudgeJobData {
 
 @Injectable()
 @Processor(JUDGE_QUEUE)
-export class JudgeQueueService implements OnModuleInit {
+export class JudgeQueueService implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(JudgeQueueService.name);
 
   constructor(
@@ -44,6 +44,13 @@ export class JudgeQueueService implements OnModuleInit {
     const concurrency = this.configService.get<number>('JUDGE_CONCURRENCY', 15);
     this.judgeQueue.process('run', concurrency, (job: Job<JudgeJobData>) => this.processTask(job));
     this.logger.log(`评测队列已启动，并发数: ${concurrency}`);
+  }
+
+  async onApplicationShutdown(signal?: string): Promise<void> {
+    this.logger.log(`收到关闭信号 (${signal ?? 'unknown'})，等待进行中的任务完成...`);
+    await this.judgeQueue.pause(true);
+    await this.judgeQueue.close();
+    this.logger.log('评测队列已关闭');
   }
 
   async enqueue(data: JudgeJobData): Promise<string> {
