@@ -220,7 +220,11 @@ export class RunMatchUseCase {
 
       if (judgeCmd.command === 'finish') {
         this.logger.log(`对局正常结束: round=${round}`);
-        const scores = judgeCmd.content as Record<string, number>;
+        const rawScores = judgeCmd.content as Record<string, unknown>;
+        const scores: Record<string, number> = {};
+        for (const [id, val] of Object.entries(rawScores)) {
+          scores[id] = typeof val === 'number' && isFinite(val) ? val : 0;
+        }
         const result = match.finish(scores, compiles);
         await this.callbackService.finish(task.callback.finish, result);
         return;

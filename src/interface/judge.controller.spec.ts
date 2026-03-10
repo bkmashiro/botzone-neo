@@ -669,6 +669,48 @@ describe('JudgeController', () => {
       await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
     });
 
+    it('should reject duplicate testcase IDs', async () => {
+      const body = {
+        ...ojBody,
+        testcases: [
+          { id: 1, input: '1\n', expectedOutput: '1\n' },
+          { id: 1, input: '2\n', expectedOutput: '2\n' },
+        ],
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow('id 重复');
+    });
+
+    it('should reject per-testcase timeLimitMs out of range', async () => {
+      const body = {
+        ...ojBody,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n', timeLimitMs: 0 }],
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow('timeLimitMs');
+    });
+
+    it('should reject per-testcase memoryLimitMb out of range', async () => {
+      const body = {
+        ...ojBody,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n', memoryLimitMb: 999999 }],
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow('memoryLimitMb');
+    });
+
+    it('should accept valid per-testcase limits', async () => {
+      const body = {
+        ...ojBody,
+        testcases: [
+          { id: 1, input: '1\n', expectedOutput: '1\n', timeLimitMs: 2000, memoryLimitMb: 512 },
+        ],
+      };
+
+      const result = await controller.submitTask(body);
+      expect(result.jobId).toBe('job-456');
+    });
+
     it('should reject when aggregate testcase size exceeds 100MB', async () => {
       // Each testcase ~5MB input + ~5MB output = ~10MB, 11 testcases = ~110MB > 100MB
       const testcases = Array.from({ length: 11 }, (_, i) => ({

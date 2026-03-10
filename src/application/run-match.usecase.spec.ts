@@ -556,6 +556,48 @@ describe('RunMatchUseCase', () => {
     });
   });
 
+  describe('finish score validation', () => {
+    it('should coerce non-numeric scores to 0', async () => {
+      mockCompileService.compile.mockResolvedValue(compiledBot);
+      mockSandbox.execute.mockResolvedValueOnce(
+        sandboxOk(
+          JSON.stringify({
+            response: JSON.stringify({
+              command: 'finish',
+              content: { '0': 'not a number' },
+            }),
+          }),
+        ),
+      );
+
+      await useCase.execute(task);
+
+      expect(mockCallbackService.finish).toHaveBeenCalledTimes(1);
+      const result = mockCallbackService.finish.mock.calls[0][1];
+      expect(result.scores).toEqual({ '0': 0 });
+    });
+
+    it('should coerce Infinity/NaN scores to 0', async () => {
+      mockCompileService.compile.mockResolvedValue(compiledBot);
+      mockSandbox.execute.mockResolvedValueOnce(
+        sandboxOk(
+          JSON.stringify({
+            response: JSON.stringify({
+              command: 'finish',
+              content: { '0': null },
+            }),
+          }),
+        ),
+      );
+
+      await useCase.execute(task);
+
+      expect(mockCallbackService.finish).toHaveBeenCalledTimes(1);
+      const result = mockCallbackService.finish.mock.calls[0][1];
+      expect(result.scores).toEqual({ '0': 0 });
+    });
+  });
+
   describe('callback error handling', () => {
     it('should continue match when update callback fails', async () => {
       mockCompileService.compile.mockResolvedValue(compiledBot);

@@ -206,6 +206,7 @@ export class JudgeController {
       throw new BadRequestException('testcases 数量不能超过 1000');
     }
     let totalTestcaseSize = 0;
+    const seenIds = new Set<unknown>();
     for (const tc of body['testcases'] as Array<Record<string, unknown>>) {
       if (!tc || typeof tc !== 'object' || Array.isArray(tc)) {
         throw new BadRequestException('testcase 必须是对象');
@@ -213,6 +214,10 @@ export class JudgeController {
       if (tc['id'] === undefined || tc['id'] === null) {
         throw new BadRequestException('testcase 缺少 id');
       }
+      if (seenIds.has(tc['id'])) {
+        throw new BadRequestException(`testcase ${tc['id']}: id 重复`);
+      }
+      seenIds.add(tc['id']);
       if (typeof tc['input'] !== 'string') {
         throw new BadRequestException(`testcase ${tc['id']}: input 必须是字符串`);
       }
@@ -228,6 +233,29 @@ export class JudgeController {
       totalTestcaseSize += (tc['input'] as string).length + (tc['expectedOutput'] as string).length;
       if (totalTestcaseSize > MAX_TOTAL_TESTCASE_SIZE) {
         throw new BadRequestException('testcases 累计大小超过 100MB 限制');
+      }
+      // 验证 per-testcase limits（可选覆盖）
+      if (tc['timeLimitMs'] !== undefined) {
+        if (
+          typeof tc['timeLimitMs'] !== 'number' ||
+          tc['timeLimitMs'] < MIN_TIME_LIMIT_MS ||
+          tc['timeLimitMs'] > MAX_TIME_LIMIT_MS
+        ) {
+          throw new BadRequestException(
+            `testcase ${tc['id']}: timeLimitMs 必须在 ${MIN_TIME_LIMIT_MS}~${MAX_TIME_LIMIT_MS}ms`,
+          );
+        }
+      }
+      if (tc['memoryLimitMb'] !== undefined) {
+        if (
+          typeof tc['memoryLimitMb'] !== 'number' ||
+          tc['memoryLimitMb'] < MIN_MEMORY_LIMIT_MB ||
+          tc['memoryLimitMb'] > MAX_MEMORY_LIMIT_MB
+        ) {
+          throw new BadRequestException(
+            `testcase ${tc['id']}: memoryLimitMb 必须在 ${MIN_MEMORY_LIMIT_MB}~${MAX_MEMORY_LIMIT_MB}MB`,
+          );
+        }
       }
     }
     const callback = body['callback'] as Record<string, unknown> | undefined;
