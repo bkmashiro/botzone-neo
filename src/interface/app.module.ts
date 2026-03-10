@@ -3,7 +3,9 @@
  */
 
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { BullModule } from '@nestjs/bull';
+import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import { JudgeModule } from './judge.module';
 import { HealthController } from './health.controller';
 
@@ -14,6 +16,20 @@ import { HealthController } from './health.controller';
       isGlobal: true,
       envFilePath: ['.env', '.env.local'],
     }),
+
+    // Bull 队列（Redis）
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        redis: {
+          host: config.get<string>('REDIS_HOST', 'localhost'),
+          port: config.get<number>('REDIS_PORT', 6379),
+        },
+      }),
+    }),
+
+    // Prometheus /metrics 端点
+    PrometheusModule.register({ defaultMetrics: { enabled: true } }),
 
     // 评测模块
     JudgeModule,
