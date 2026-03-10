@@ -8,6 +8,7 @@ import { Injectable, Logger, Inject } from '@nestjs/common';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { ConfigService } from '@nestjs/config';
 import { Counter, Gauge, Histogram } from 'prom-client';
+import { trace } from '@opentelemetry/api';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -35,6 +36,8 @@ class MatchTimeoutError extends Error {
   }
 }
 
+const tracer = trace.getTracer('botzone-neo', '1.0.0');
+
 @Injectable()
 export class RunMatchUseCase {
   private readonly logger = new Logger(RunMatchUseCase.name);
@@ -57,61 +60,73 @@ export class RunMatchUseCase {
   }
 
   async execute(task: MatchTask): Promise<void> {
-    const match = new Match(task);
-    const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'botzone-'));
-    const strategy = this.createStrategy(task.runMode);
-    const bots = new Map<string, BotRuntime>();
-    const histories = new Map<string, { requests: string[]; responses: string[] }>();
-    const compiles: CompileSummary[] = [];
-    const session = this.dataStoreService.createSession();
+    return tracer.startActiveSpan('RunMatchUseCase.execute', async (span) => {
+      span.setAttribute('match.runMode', task.runMode);
+      span.setAttribute('match.botCount', task.bots.length);
 
-    // 全局超时控制
-    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutHandle = setTimeout(
-        () => reject(new MatchTimeoutError(this.maxMatchDurationMs)),
-        this.maxMatchDurationMs,
-      );
-    });
+      const match = new Match(task);
+      const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'botzone-'));
+      const strategy = this.createStrategy(task.runMode);
+      const bots = new Map<string, BotRuntime>();
+      const histories = new Map<string, { requests: string[]; responses: string[] }>();
+      const compiles: CompileSummary[] = [];
+      const session = this.dataStoreService.createSession();
 
-    this.activeMatches.inc();
-    const startTime = Date.now();
-    let verdict = Verdict.OK;
-
-    try {
-      await Promise.race([
-        this.executeInner(task, match, workDir, strategy, bots, histories, compiles, session),
-        timeoutPromise,
-      ]);
-    } catch (err) {
-      if (err instanceof MatchTimeoutError) {
-        this.logger.error(err.message);
-        verdict = Verdict.TLE;
-        if (!match.isFinished) {
-          const scores: Record<string, number> = {};
-          for (const spec of task.bots) {
-            if (spec.id !== 'judger') scores[spec.id] = 0;
-          }
-          const result = match.finish(scores, compiles);
-          await this.callbackService.finish(task.callback.finish, result);
-        }
-      } else {
-        verdict = Verdict.SE;
-        throw err;
-      }
-    } finally {
-      this.activeMatches.dec();
-      this.judgeRequestsTotal.inc({ type: 'botzone', verdict });
-      this.judgeDurationMs.observe({ type: 'botzone' }, Date.now() - startTime);
-      clearTimeout(timeoutHandle);
-      for (const bot of bots.values()) {
-        await strategy.cleanup(bot);
-      }
-      session.clear();
-      await fs.rm(workDir, { recursive: true, force: true }).catch((cleanupErr) => {
-        this.logger.warn(`临时目录清理失败: ${workDir}: ${cleanupErr}`);
+      // 全局超时控制
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(
+          () => reject(new MatchTimeoutError(this.maxMatchDurationMs)),
+          this.maxMatchDurationMs,
+        );
       });
-    }
+
+      this.logger.log(
+        `对局开始: bots=${task.bots.map((b) => b.id).join(',')}, mode=${task.runMode}`,
+      );
+
+      this.activeMatches.inc();
+      const startTime = Date.now();
+      let verdict = Verdict.OK;
+
+      try {
+        await Promise.race([
+          this.executeInner(task, match, workDir, strategy, bots, histories, compiles, session),
+          timeoutPromise,
+        ]);
+      } catch (err) {
+        if (err instanceof MatchTimeoutError) {
+          this.logger.error(err.message);
+          verdict = Verdict.TLE;
+          if (!match.isFinished) {
+            const scores: Record<string, number> = {};
+            for (const spec of task.bots) {
+              if (spec.id !== 'judger') scores[spec.id] = 0;
+            }
+            const result = match.finish(scores, compiles);
+            await this.callbackService.finish(task.callback.finish, result);
+          }
+        } else {
+          verdict = Verdict.SE;
+          span.recordException(err instanceof Error ? err : new Error(String(err)));
+          throw err;
+        }
+      } finally {
+        span.setAttribute('match.verdict', verdict);
+        span.end();
+        this.activeMatches.dec();
+        this.judgeRequestsTotal.inc({ type: 'botzone', verdict });
+        this.judgeDurationMs.observe({ type: 'botzone' }, Date.now() - startTime);
+        clearTimeout(timeoutHandle);
+        for (const bot of bots.values()) {
+          await strategy.cleanup(bot);
+        }
+        session.clear();
+        await fs.rm(workDir, { recursive: true, force: true }).catch((cleanupErr) => {
+          this.logger.warn(`临时目录清理失败: ${workDir}: ${cleanupErr}`);
+        });
+      }
+    });
   }
 
   private async executeInner(
@@ -124,11 +139,16 @@ export class RunMatchUseCase {
     compiles: CompileSummary[],
     session: SessionScope,
   ): Promise<void> {
+    // ── 阶段1: 编译所有代码 ──
     for (const spec of task.bots) {
+      this.logger.debug(`编译 Bot: id=${spec.id}, language=${spec.language}`);
       const compileSummary = await this.compileBot(spec, workDir, bots);
       compiles.push(compileSummary);
 
       if (compileSummary.verdict !== Verdict.OK) {
+        this.logger.warn(
+          `编译失败导致对局结束: botId=${spec.id}, verdict=${compileSummary.verdict}`,
+        );
         const scores: Record<string, number> = {};
         for (const b of task.bots) {
           if (b.id === 'judger') continue;
@@ -179,28 +199,37 @@ export class RunMatchUseCase {
       }
 
       if (judgeCmd.command === 'finish') {
+        this.logger.log(`对局正常结束: round=${round}`);
         const scores = judgeCmd.content as Record<string, number>;
         const result = match.finish(scores, compiles);
         await this.callbackService.finish(task.callback.finish, result);
         return;
       }
 
+      // 并行运行各 Bot（同一轮内各 Bot 互相独立）
+      const botEntries = Object.entries(judgeCmd.content).filter(
+        ([id]) => id !== 'judger' && bots.has(id),
+      );
+
+      const botResults = await Promise.all(
+        botEntries.map(async ([botId, request]) => {
+          const bot = bots.get(botId)!;
+          const history = histories.get(botId)!;
+          history.requests.push(String(request));
+
+          const botInput = await this.buildBotInput(bot, history, session);
+          const output: BotOutput = await strategy.runRound(bot, botInput);
+          await strategy.afterRound(bot);
+
+          await this.updatePersistentData(botId, output, session);
+          history.responses.push(output.response);
+          return [botId, output.response] as const;
+        }),
+      );
+
       const botResponses: Record<string, string> = {};
-      for (const [botId, request] of Object.entries(judgeCmd.content)) {
-        if (botId === 'judger') continue;
-        const bot = bots.get(botId);
-        if (!bot) continue;
-
-        const history = histories.get(botId)!;
-        history.requests.push(String(request));
-
-        const botInput = await this.buildBotInput(bot, history, session);
-        const output: BotOutput = await strategy.runRound(bot, botInput);
-        await strategy.afterRound(bot);
-
-        await this.updatePersistentData(botId, output, session);
-        history.responses.push(output.response);
-        botResponses[botId] = output.response;
+      for (const [botId, response] of botResults) {
+        botResponses[botId] = response;
       }
 
       match.addLog({ round, judgeCmd, botResponses });

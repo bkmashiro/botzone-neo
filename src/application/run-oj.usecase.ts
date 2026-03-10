@@ -32,14 +32,18 @@ export class RunOJUseCase {
 
   async execute(task: OJTask): Promise<void> {
     const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'oj-'));
+    this.logger.log(`OJ 评测开始: language=${task.language}, testcases=${task.testcases.length}`);
 
     try {
       // ── 编译用户代码 ──
       let compiled;
+      this.logger.debug(`编译用户代码: language=${task.language}`);
       try {
         compiled = await this.compileService.compile(task.language, task.source);
+        this.logger.debug('用户代码编译成功');
       } catch (err) {
         if (err instanceof CompileError) {
+          this.logger.warn(`用户代码编译失败: ${err.message}`);
           const result: OJResult = {
             verdict: Verdict.CE,
             testcases: [],
@@ -54,6 +58,7 @@ export class RunOJUseCase {
       // ── 编译 checker（如有） ──
       let checker: IChecker;
       if (task.judgeMode === 'checker' && task.checkerLanguage && task.checkerSource) {
+        this.logger.debug(`编译自定义 Checker: language=${task.checkerLanguage}`);
         const checkerCompiled = await this.compileService.compile(
           task.checkerLanguage,
           task.checkerSource,
@@ -61,6 +66,7 @@ export class RunOJUseCase {
         const checkerWorkDir = path.join(workDir, 'checker');
         await fs.mkdir(checkerWorkDir, { recursive: true });
         checker = new CustomChecker(this.sandbox, checkerCompiled, checkerWorkDir);
+        this.logger.debug('自定义 Checker 编译成功');
       } else {
         checker = new DiffChecker();
       }
@@ -126,6 +132,9 @@ export class RunOJUseCase {
         }
       }
 
+      this.logger.log(
+        `OJ 评测完成: verdict=${overallVerdict}, testcases=${testcaseResults.length}`,
+      );
       const result: OJResult = {
         verdict: overallVerdict,
         testcases: testcaseResults,

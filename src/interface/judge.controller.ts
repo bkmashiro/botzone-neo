@@ -4,7 +4,7 @@
  * POST /v1/judge — 统一入口，按 task.type 分发到 Botzone 或 OJ 用例
  */
 
-import { Controller, Post, Body, HttpCode, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, BadRequestException, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JudgeQueueService } from './judge-queue.service';
 import { MatchTask } from '../domain/match';
@@ -22,6 +22,8 @@ import {
 @ApiTags('judge')
 @Controller('v1/judge')
 export class JudgeController {
+  private readonly logger = new Logger(JudgeController.name);
+
   constructor(private readonly judgeQueue: JudgeQueueService) {}
 
   @Post()
@@ -45,6 +47,9 @@ export class JudgeController {
       this.validateBotzoneTask(body);
       const task = this.toMatchTask(body);
       const jobId = await this.judgeQueue.enqueue({ type: 'botzone', task });
+      this.logger.log(
+        `Botzone 任务已入队: jobId=${jobId}, bots=${task.bots.map((b) => b.id).join(',')}`,
+      );
       return { message: '对局任务已接受', jobId };
     }
 
@@ -52,6 +57,7 @@ export class JudgeController {
       this.validateOJTask(body);
       const task = body as unknown as OJTask;
       const jobId = await this.judgeQueue.enqueue({ type: 'oj', task });
+      this.logger.log(`OJ 任务已入队: jobId=${jobId}, language=${task.language}`);
       return { message: 'OJ 评测任务已接受', jobId };
     }
 

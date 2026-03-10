@@ -1,10 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
 /** globaldata 文件过期时间（默认 7 天） */
 const GLOBALDATA_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** 清理间隔（每小时） */
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 /** 会话级数据作用域（每个对局独立，并发安全） */
 export interface SessionScope {
@@ -21,9 +24,10 @@ export interface SessionScope {
  * - globaldata：文件存储，跨对局持久化，7 天 TTL 自动清理
  */
 @Injectable()
-export class DataStoreService {
+export class DataStoreService implements OnModuleInit {
   private readonly logger = new Logger(DataStoreService.name);
   private readonly baseDir: string;
+  private cleanupTimer: ReturnType<typeof setInterval> | undefined;
 
   /** 所有活跃会话 */
   private readonly sessions: Map<string, Map<string, string>> = new Map();
@@ -33,6 +37,20 @@ export class DataStoreService {
 
   constructor() {
     this.baseDir = path.join(process.cwd(), '.data', 'globaldata');
+  }
+
+  onModuleInit(): void {
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupExpiredGlobalData().catch((err) => {
+        this.logger.warn(`定期清理失败: ${err}`);
+      });
+    }, CLEANUP_INTERVAL_MS);
+  }
+
+  onModuleDestroy(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+    }
   }
 
   /** 创建对局级会话作用域（并发安全） */
@@ -82,7 +100,8 @@ export class DataStoreService {
         return '';
       }
       return await fs.readFile(filePath, 'utf-8');
-    } catch {
+    } catch (err) {
+      this.logger.debug(`全局数据读取失败 (${botId}): ${err}`);
       return '';
     }
   }

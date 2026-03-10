@@ -18,10 +18,10 @@ export class CallbackService {
         body: JSON.stringify(payload),
       });
       if (!response.ok) {
-        this.logger.warn(`进度回调失败: ${response.status} ${response.statusText}`);
+        this.logger.warn(`进度回调失败 (${url}): ${response.status} ${response.statusText}`);
       }
     } catch (err) {
-      this.logger.error(`进度回调异常: ${err}`);
+      this.logger.error(`进度回调异常 (${url}): ${err}`);
     }
   }
 
@@ -34,12 +34,12 @@ export class CallbackService {
         body: JSON.stringify(result),
       });
       if (!response.ok) {
-        this.logger.warn(`结果回调失败: ${response.status} ${response.statusText}`);
+        this.logger.warn(`结果回调失败 (${url}): ${response.status} ${response.statusText}`);
       } else {
-        this.logger.log('结果已回报');
+        this.logger.log(`结果已回报: ${url}`);
       }
     } catch (err) {
-      this.logger.error(`结果回调异常: ${err}`);
+      this.logger.error(`结果回调异常 (${url}): ${err}`);
     }
   }
 }
