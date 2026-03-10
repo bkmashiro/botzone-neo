@@ -43,12 +43,18 @@ export class RestartStrategy implements IBotRunStrategy {
 
     // 非零退出码
     if (result.exitCode !== 0) {
+      this.logger.error(
+        `Bot ${bot.id} 非零退出: code=${result.exitCode} stderr=${result.stderr?.slice(0, 200)}`,
+      );
       return {
         response: '',
         debug: result.stderr || `进程异常退出 (code=${result.exitCode})`,
       };
     }
 
+    this.logger.debug(
+      `Bot ${bot.id} stdout=${JSON.stringify(result.stdout?.slice(0, 100))} stderr=${result.stderr?.slice(0, 50)}`,
+    );
     return this.parseOutput(result.stdout);
   }
 
@@ -62,8 +68,16 @@ export class RestartStrategy implements IBotRunStrategy {
       const parsed: unknown = JSON.parse(firstLine);
       if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
         const output = parsed as Record<string, unknown>;
+        // If the JSON has a "command" field (judger output), the whole line IS the response
+        // If the JSON has a "response" field (structured bot output), use that
+        const response =
+          typeof output.response === 'string'
+            ? output.response
+            : 'command' in output
+              ? firstLine // judger: pass whole JSON as response
+              : '';
         return {
-          response: typeof output.response === 'string' ? output.response : '',
+          response,
           debug: typeof output.debug === 'string' ? output.debug : undefined,
           data: typeof output.data === 'string' ? output.data : undefined,
           globaldata: typeof output.globaldata === 'string' ? output.globaldata : undefined,

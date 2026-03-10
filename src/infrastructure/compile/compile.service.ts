@@ -28,8 +28,7 @@ interface CacheEntry {
   lastAccess: number;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { version: APP_VERSION } = require('../../../package.json') as { version: string };
+const APP_VERSION = '1.0.0';
 const tracer = trace.getTracer('botzone-neo', APP_VERSION);
 
 @Injectable()

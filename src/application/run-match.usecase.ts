@@ -36,8 +36,7 @@ class MatchTimeoutError extends Error {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { version: APP_VERSION } = require('../../package.json') as { version: string };
+const APP_VERSION = '1.0.0';
 const tracer = trace.getTracer('botzone-neo', APP_VERSION);
 
 @Injectable()
@@ -242,7 +241,8 @@ export class RunMatchUseCase {
           const bot = bots.get(botId);
           const history = histories.get(botId);
           if (!bot || !history) return [botId, ''] as const;
-          history.requests.push(String(request));
+          // Serialize content to string (objects must be JSON-stringified, not "[object Object]")
+          history.requests.push(typeof request === 'string' ? request : JSON.stringify(request));
 
           const botInput = await this.buildBotInput(bot, history, session);
           const output: BotOutput = await strategy.runRound(bot, botInput);
