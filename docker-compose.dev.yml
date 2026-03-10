@@ -1,5 +1,3 @@
-version: "3.8"
-
 # 开发环境覆盖配置
 # 使用方式: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
@@ -16,11 +14,11 @@ services:
 
   mariadb:
     ports:
-      - "3306:3306"
+      - "${DB_PORT:-3306}:3306"
 
   redis:
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
 
 networks:
   botzone-internal:

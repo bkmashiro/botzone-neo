@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   judger:
     build:
@@ -9,25 +7,37 @@ services:
     restart: unless-stopped
     ports:
       - "${PORT:-3001}:3001"
+    env_file:
+      - .env
     environment:
       - PORT=3001
       - DB_HOST=mariadb
       - DB_PORT=3306
-      - DB_DATABASE=${DB_DATABASE:-botzone}
-      - DB_USERNAME=${DB_USERNAME:-botzone}
-      - DB_PASSWORD=${DB_PASSWORD:-botzonepass}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JUDGE_CAPABILITY=${JUDGE_CAPABILITY:-15}
     depends_on:
       mariadb:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3001/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     networks:
       - botzone-internal
     # nsjail 需要特权模式
     privileged: true
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 4G
+        reservations:
+          cpus: "1"
+          memory: 512M
 
   mariadb:
     image: mariadb:10.11
@@ -45,14 +55,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
     networks:
       - botzone-internal
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
 
   redis:
     image: redis:7-alpine
     container_name: botzone-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis-data:/data
     healthcheck:
@@ -62,12 +78,20 @@ services:
       retries: 5
     networks:
       - botzone-internal
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
 
 volumes:
   mariadb-data:
+    name: botzone-mariadb-data
   redis-data:
+    name: botzone-redis-data
 
 networks:
   botzone-internal:
+    name: botzone-internal
     driver: bridge
     internal: true
