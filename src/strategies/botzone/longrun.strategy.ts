@@ -94,6 +94,11 @@ export class LongrunStrategy implements IBotRunStrategy {
       this.logger.debug(`Bot ${bot.id} 进程退出 (code=${code})`);
     });
 
+    this.child.on('error', (err) => {
+      this.exited = true;
+      this.logger.error(`Bot ${bot.id} 启动失败: ${err.message}`);
+    });
+
     this.child.stdin!.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code !== 'EPIPE') throw err;
     });

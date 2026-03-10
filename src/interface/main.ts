@@ -66,6 +66,7 @@ async function bootstrap(): Promise<void> {
 const processLogger = new NestLogger('Process');
 process.on('unhandledRejection', (reason) => {
   processLogger.error(`Unhandled Rejection: ${reason}`);
+  process.exit(1);
 });
 
 process.on('uncaughtException', (err) => {
