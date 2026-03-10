@@ -268,6 +268,7 @@ docker/                      # Docker 相关配置
 | `NSJAIL_PATH` | `/usr/bin/nsjail` | nsjail 二进制路径 |
 | `TRUST_IP` | `127.0.0.1` | 允许提交评测任务的 IP（逗号分隔） |
 | `CORS_ORIGIN` | `*` | CORS 允许的来源（`*` 或具体域名） |
+| `OTEL_ENABLED` | `false` | 启用 OpenTelemetry 追踪 |
 
 ## 评测结果（Verdict）
 
