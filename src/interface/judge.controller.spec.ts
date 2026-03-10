@@ -473,6 +473,35 @@ describe('JudgeController', () => {
       await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
     });
 
+    it('should throw when judgeMode is missing', async () => {
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
+        callback: { finish: 'http://example.com/callback' },
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw when judgeMode is invalid', async () => {
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
+        callback: { finish: 'http://example.com/callback' },
+        judgeMode: 'invalid',
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
     it('should throw when checkerSource exceeds 64KB in checker mode', async () => {
       const body = {
         type: 'oj',

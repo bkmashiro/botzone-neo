@@ -213,8 +213,11 @@ export class JudgeController {
     }
     this.validateUrl(String(callback['finish']), 'callback.finish');
 
-    // checker 模式要求同时提供 checkerSource 和 checkerLanguage
+    // 验证 judgeMode
     const judgeMode = body['judgeMode'];
+    if (!judgeMode || (judgeMode !== 'standard' && judgeMode !== 'checker')) {
+      throw new BadRequestException('judgeMode 必须为 standard 或 checker');
+    }
     if (judgeMode === 'checker') {
       if (!body['checkerSource'] || typeof body['checkerSource'] !== 'string') {
         throw new BadRequestException('checker 模式要求提供 checkerSource');

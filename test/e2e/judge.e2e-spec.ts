@@ -564,6 +564,23 @@ describe('Judge API E2E', () => {
     expect(mockEnqueue).not.toHaveBeenCalled();
   });
 
+  it('POST /v1/judge OJ 缺少 judgeMode → 400', async () => {
+    await request(app.getHttpServer())
+      .post('/v1/judge')
+      .send({
+        type: 'oj',
+        language: 'cpp',
+        source: '// code',
+        testcases: [{ id: 1, input: '1', expectedOutput: '1' }],
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        callback: { finish: 'http://test/f' },
+      })
+      .expect(400);
+
+    expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
   // ── Botzone runMode ──
 
   it('POST /v1/judge botzone longrun 模式 → 202', async () => {
