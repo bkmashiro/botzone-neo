@@ -8,11 +8,13 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { ConfigService } from '@nestjs/config';
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { Counter } from 'prom-client';
 import { CompiledBot } from '../../domain/bot';
 import { CompileError } from '../../domain/verdict';
 import { ILanguage } from './languages/language.interface';
@@ -34,7 +36,11 @@ export class CompileService {
   private readonly timeLimitMs: number;
   private readonly maxCacheSize = 200;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    @InjectMetric('botzone_compile_cache_hits_total') private readonly cacheHits: Counter,
+    @InjectMetric('botzone_compile_cache_misses_total') private readonly cacheMisses: Counter,
+  ) {
     const langs: ILanguage[] = [new CppLanguage(), new PythonLanguage(), new TypeScriptLanguage()];
     for (const lang of langs) {
       this.languages.set(lang.name, lang);
@@ -62,9 +68,12 @@ export class CompileService {
     const cached = this.cache.get(hash);
     if (cached) {
       cached.lastAccess = Date.now();
+      this.cacheHits.inc();
       this.logger.debug(`编译缓存命中: ${hash}`);
       return cached.compiled;
     }
+
+    this.cacheMisses.inc();
 
     // 准备编译目录
     const compileDir = path.join(this.cacheDir, hash);
