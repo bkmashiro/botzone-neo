@@ -17,6 +17,8 @@ export interface SandboxResult {
   exitCode: number;
   /** 是否超时 */
   timedOut: boolean;
+  /** 峰值内存使用（KB），沙箱可选提供 */
+  memoryKb?: number;
 }
 
 /** 沙箱执行请求 */

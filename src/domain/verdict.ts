@@ -26,6 +26,8 @@ export enum Verdict {
   WA = 'WA',
   /** 答案正确（OJ 专用） */
   AC = 'AC',
+  /** 格式错误（OJ 专用，Presentation Error） */
+  PE = 'PE',
 }
 
 // ── 错误类 ──────────────────────────────────────────────

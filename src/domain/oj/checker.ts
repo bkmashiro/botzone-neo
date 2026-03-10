@@ -9,8 +9,8 @@ import { Verdict } from '../verdict';
 
 /** Checker 判定结果 */
 export interface CheckResult {
-  /** 判定：AC 或 WA */
-  verdict: Verdict.AC | Verdict.WA;
+  /** 判定：AC、WA、PE 或 SE */
+  verdict: Verdict.AC | Verdict.WA | Verdict.PE | Verdict.SE;
   /** 判定信息 */
   message?: string;
 }

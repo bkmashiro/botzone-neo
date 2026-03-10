@@ -89,8 +89,10 @@ export class RunOJUseCase {
 
         const timeMs = Date.now() - startTime;
 
+        const memoryKb = sandboxResult.memoryKb;
+
         if (sandboxResult.timedOut) {
-          testcaseResults.push({ id: tc.id, verdict: Verdict.TLE, timeMs });
+          testcaseResults.push({ id: tc.id, verdict: Verdict.TLE, timeMs, memoryKb });
           if (overallVerdict === Verdict.AC) overallVerdict = Verdict.TLE;
           continue;
         }
@@ -100,6 +102,7 @@ export class RunOJUseCase {
             id: tc.id,
             verdict: Verdict.RE,
             timeMs,
+            memoryKb,
             message: sandboxResult.stderr || `exit code ${sandboxResult.exitCode}`,
           });
           if (overallVerdict === Verdict.AC) overallVerdict = Verdict.RE;
@@ -117,6 +120,7 @@ export class RunOJUseCase {
           verdict: checkResult.verdict,
           actualOutput: sandboxResult.stdout,
           timeMs,
+          memoryKb,
           message: checkResult.message,
         });
 
