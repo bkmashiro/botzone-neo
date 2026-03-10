@@ -19,11 +19,13 @@ import { RequestIdMiddleware } from './request-id.middleware';
       envFilePath: ['.env', '.env.local'],
     }),
 
-    // 结构化日志
+    // 结构化日志（自动关联 X-Request-ID）
     LoggerModule.forRoot({
       pinoHttp: {
         level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
         transport: process.env.NODE_ENV !== 'production' ? { target: 'pino-pretty' } : undefined,
+        genReqId: (req: { headers: Record<string, string | string[] | undefined> }) =>
+          (req.headers['x-request-id'] as string) ?? '',
       },
     }),
 

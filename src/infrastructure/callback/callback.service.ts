@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { getRequestId } from '../../interface/request-context';
 
 /** 回调请求超时：10 秒 */
 const CALLBACK_TIMEOUT_MS = 10_000;
@@ -62,10 +63,15 @@ export class CallbackService {
   private async fetchWithTimeout(url: string, payload: unknown): Promise<Response> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), CALLBACK_TIMEOUT_MS);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const requestId = getRequestId();
+    if (requestId) {
+      headers['X-Request-ID'] = requestId;
+    }
     try {
       return await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
