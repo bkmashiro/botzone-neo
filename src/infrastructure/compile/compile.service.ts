@@ -72,14 +72,20 @@ export class CompileService {
 
         const hash = crypto.createHash('md5').update(`${language}:${source}`).digest('hex');
 
-        // 检查缓存
+        // 检查缓存（验证编译产物仍存在）
         const cached = this.cache.get(hash);
         if (cached) {
-          cached.lastAccess = Date.now();
-          this.cacheHits.inc();
-          span.setAttribute('compile.cacheHit', true);
-          this.logger.debug(`编译缓存命中: ${hash}`);
-          return cached.compiled;
+          try {
+            await fs.access(path.join(this.cacheDir, hash));
+            cached.lastAccess = Date.now();
+            this.cacheHits.inc();
+            span.setAttribute('compile.cacheHit', true);
+            this.logger.debug(`编译缓存命中: ${hash}`);
+            return cached.compiled;
+          } catch {
+            this.logger.debug(`缓存文件已失效，重新编译: ${hash}`);
+            this.cache.delete(hash);
+          }
         }
 
         span.setAttribute('compile.cacheHit', false);
@@ -148,13 +154,14 @@ export class CompileService {
 
       let stdout = '';
       let stderr = '';
+      const maxOutput = 64 * 1024; // 64KB max compiler output
 
       child.stdout.on('data', (data: Buffer) => {
-        stdout += data.toString();
+        if (stdout.length < maxOutput) stdout += data.toString();
       });
 
       child.stderr.on('data', (data: Buffer) => {
-        stderr += data.toString();
+        if (stderr.length < maxOutput) stderr += data.toString();
       });
 
       const timer = setTimeout(() => {
