@@ -51,6 +51,9 @@ export class DirectSandbox implements ISandbox {
         reject(err);
       });
 
+      // Ignore EPIPE: process may exit before consuming stdin
+      child.stdin.on('error', () => {});
+
       if (request.stdin) {
         child.stdin.write(request.stdin);
       }
