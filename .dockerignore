@@ -17,5 +17,8 @@ test
 *.spec.ts
 jest.config.*
 .eslintrc*
+eslint.config.*
 .prettierrc*
+.lintstagedrc*
+.husky
 .claude
