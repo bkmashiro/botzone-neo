@@ -5,6 +5,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { JudgeModule } from './judge.module';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -17,5 +18,6 @@ import { JudgeModule } from './judge.module';
     // 评测模块
     JudgeModule,
   ],
+  controllers: [HealthController],
 })
 export class AppModule {}
