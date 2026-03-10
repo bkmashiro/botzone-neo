@@ -12,7 +12,8 @@ import { TypeScriptLanguage } from './languages/typescript.language';
 
 /** LRU 缓存条目 */
 interface CacheEntry {
-  execPath: string;
+  execCmd: string;
+  execArgs: string[];
   lastAccess: number;
 }
 
@@ -64,13 +65,19 @@ export class CompileService {
     // 检查缓存
     const cached = this.cache.get(hash);
     if (cached) {
+      // 验证关键文件是否仍存在
+      const checkPath =
+        cached.execArgs.length > 0 ? cached.execArgs[0] : cached.execCmd;
       try {
-        await fs.access(cached.execPath);
+        await fs.access(checkPath);
         cached.lastAccess = Date.now();
         this.logger.debug(`编译缓存命中: ${hash}`);
-        return { verdict: 'OK', execPath: cached.execPath };
+        return {
+          verdict: 'OK',
+          execCmd: cached.execCmd,
+          execArgs: cached.execArgs,
+        };
       } catch {
-        // 缓存文件不存在，移除缓存条目
         this.cache.delete(hash);
       }
     }
@@ -96,14 +103,18 @@ export class CompileService {
       };
     }
 
-    // 确定可执行文件路径
-    const execPath = lang.needsCompilation ? outputPath : sourcePath;
+    // 获取运行命令
+    const runCmd = lang.getRunCommand(sourcePath, outputPath);
 
     // 更新缓存
-    this.cache.set(hash, { execPath, lastAccess: Date.now() });
+    this.cache.set(hash, {
+      execCmd: runCmd.cmd,
+      execArgs: runCmd.args,
+      lastAccess: Date.now(),
+    });
     this.evictCache();
 
-    return { verdict: 'OK', execPath };
+    return { verdict: 'OK', execCmd: runCmd.cmd, execArgs: runCmd.args };
   }
 
   /** 获取语言配置 */

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { CompileService } from '../compile/compile.service';
 import { CallbackService } from '../callback/callback.service';
 import { DataStoreService } from '../data-store/data-store.service';
+import { NsjailService } from '../sandbox/nsjail.service';
 import {
   Task,
   BotContext,
@@ -33,34 +34,51 @@ export class MatchRunner {
     private readonly compileService: CompileService,
     private readonly callbackService: CallbackService,
     private readonly dataStoreService: DataStoreService,
+    private readonly nsjailService: NsjailService,
   ) {}
 
   /** 执行一场完整对局 */
   async run(task: Task): Promise<void> {
     const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'botzone-'));
     const log: unknown[] = [];
-    const compileResults: Record<string, { verdict: Verdict; message?: string }> = {};
+    const compileResults: Record<
+      string,
+      { verdict: Verdict; message?: string }
+    > = {};
     const botContexts: Map<string, BotContext> = new Map();
-    const histories: Map<string, { requests: string[]; responses: string[] }> = new Map();
+    const histories: Map<
+      string,
+      { requests: string[]; responses: string[] }
+    > = new Map();
     const strategy = this.createStrategy(task.runMode ?? 'restart');
 
     try {
-      // 阶段1：编译所有代码
+      // ── 阶段1：编译所有代码 ──
       for (const [id, code] of Object.entries(task.game)) {
         const result: CompileResult = await this.compileService.compile(
           code.language,
           code.source,
         );
-        compileResults[id] = { verdict: result.verdict, message: result.message };
+        compileResults[id] = {
+          verdict: result.verdict,
+          message: result.message,
+        };
 
         if (result.verdict !== 'OK') {
-          // 编译失败，立即结束
+          // 编译失败，立即结束：失败方得 0 分，其余得 1 分
           const scores: Record<string, number> = {};
           for (const botId of Object.keys(task.game)) {
             scores[botId] = botId === id ? 0 : 1;
           }
-          const gameResult: GameResult = { scores, log, compile: compileResults };
-          await this.callbackService.finish(task.callback.finish, gameResult);
+          const gameResult: GameResult = {
+            scores,
+            log,
+            compile: compileResults,
+          };
+          await this.callbackService.finish(
+            task.callback.finish,
+            gameResult,
+          );
           return;
         }
 
@@ -70,18 +88,20 @@ export class MatchRunner {
         botContexts.set(id, {
           id,
           language: code.language,
-          execPath: result.execPath!,
+          execCmd: result.execCmd!,
+          execArgs: result.execArgs ?? [],
           workDir: botWorkDir,
           limit: code.limit,
         });
         histories.set(id, { requests: [], responses: [] });
       }
 
-      // 阶段2：对局循环
+      // ── 阶段2：对局循环 ──
       let round = 0;
-      let judgeInput: string = typeof task.initdata === 'object'
-        ? JSON.stringify(task.initdata)
-        : (task.initdata ?? '');
+      const initdataStr: string =
+        typeof task.initdata === 'object'
+          ? JSON.stringify(task.initdata)
+          : (task.initdata ?? '');
 
       while (round < MAX_ROUNDS) {
         round++;
@@ -95,22 +115,42 @@ export class MatchRunner {
         }
 
         const judgerHistory = histories.get('judger')!;
-        const judgerInput: BotInput = {
-          requests: judgerHistory.requests,
-          responses: judgerHistory.responses,
-          data: await this.dataStoreService.getData(judgerCtx.id),
-          globaldata: await this.dataStoreService.getGlobalData(judgerCtx.id),
-          timeLimit: judgerCtx.limit.time / 1000,
-          memoryLimit: judgerCtx.limit.memory,
-        };
 
         // 首轮裁判的 request 包含 initdata
         if (round === 1) {
-          judgerHistory.requests.push(judgeInput);
+          judgerHistory.requests.push(initdataStr);
         }
 
-        const judgerOutput = await strategy.runRound(judgerCtx, judgerInput);
+        const judgerBotInput: BotInput = {
+          requests: judgerHistory.requests,
+          responses: judgerHistory.responses,
+          data: await this.dataStoreService.getData(judgerCtx.id),
+          globaldata: await this.dataStoreService.getGlobalData(
+            judgerCtx.id,
+          ),
+          time_limit: judgerCtx.limit.time,
+          memory_limit: judgerCtx.limit.memory,
+        };
+
+        const judgerOutput = await strategy.runRound(
+          judgerCtx,
+          judgerBotInput,
+        );
         await strategy.afterRound(judgerCtx);
+
+        // 裁判运行异常
+        if (judgerOutput.verdict && judgerOutput.verdict !== 'OK') {
+          this.logger.error(
+            `裁判运行异常: ${judgerOutput.verdict} - ${judgerOutput.debug}`,
+          );
+          log.push({
+            judge: {
+              error: judgerOutput.verdict,
+              debug: judgerOutput.debug,
+            },
+          });
+          break;
+        }
 
         if (!judgerOutput.response) {
           this.logger.error('裁判无输出');
@@ -119,32 +159,49 @@ export class MatchRunner {
 
         // 更新裁判持久化数据
         if (judgerOutput.data !== undefined) {
-          await this.dataStoreService.setData(judgerCtx.id, judgerOutput.data);
+          await this.dataStoreService.setData(
+            judgerCtx.id,
+            judgerOutput.data,
+          );
         }
 
         // 解析裁判输出
         let judgeResult: JudgeOutput;
         try {
-          judgeResult = JSON.parse(judgerOutput.response) as JudgeOutput;
+          judgeResult = JSON.parse(
+            judgerOutput.response,
+          ) as JudgeOutput;
         } catch {
           this.logger.error('裁判输出 JSON 解析失败');
+          log.push({
+            judge: { error: 'INVALID_JSON', raw: judgerOutput.response },
+          });
           break;
         }
 
         judgerHistory.responses.push(judgerOutput.response);
         log.push({ judge: judgeResult });
 
-        // 判定是否结束
+        // ── 判定是否结束 ──
         if (judgeResult.command === 'finish') {
           const scores = judgeResult.content as Record<string, number>;
-          const gameResult: GameResult = { scores, log, compile: compileResults };
-          await this.callbackService.finish(task.callback.finish, gameResult);
+          const gameResult: GameResult = {
+            scores,
+            log,
+            compile: compileResults,
+          };
+          await this.callbackService.finish(
+            task.callback.finish,
+            gameResult,
+          );
           return;
         }
 
-        // command === "request"：向各 bot 发送请求
+        // ── command === "request"：向各 bot 发送请求 ──
         const botOutputs: Record<string, string> = {};
-        for (const [botId, request] of Object.entries(judgeResult.content)) {
+        for (const [botId, request] of Object.entries(
+          judgeResult.content,
+        )) {
           if (botId === 'judger') continue;
           const ctx = botContexts.get(botId);
           if (!ctx) continue;
@@ -157,24 +214,43 @@ export class MatchRunner {
             responses: history.responses,
             data: await this.dataStoreService.getData(botId),
             globaldata: await this.dataStoreService.getGlobalData(botId),
-            timeLimit: ctx.limit.time / 1000,
-            memoryLimit: ctx.limit.memory,
+            time_limit: ctx.limit.time,
+            memory_limit: ctx.limit.memory,
           };
 
-          const output: BotOutput = await strategy.runRound(ctx, botInput);
+          const output: BotOutput = await strategy.runRound(
+            ctx,
+            botInput,
+          );
           await strategy.afterRound(ctx);
+
+          // 记录 bot 运行时错误（TLE/RE/MLE 等），但仍继续对局让裁判判定
+          if (output.verdict && output.verdict !== 'OK') {
+            this.logger.warn(
+              `Bot ${botId} 运行异常: ${output.verdict} - ${output.debug}`,
+            );
+          }
 
           // 更新持久化数据
           if (output.data !== undefined) {
             await this.dataStoreService.setData(botId, output.data);
           }
           if (output.globaldata !== undefined) {
-            await this.dataStoreService.setGlobalData(botId, output.globaldata);
+            await this.dataStoreService.setGlobalData(
+              botId,
+              output.globaldata,
+            );
           }
 
           history.responses.push(output.response);
           botOutputs[botId] = output.response;
-          log.push({ [botId]: { response: output.response, debug: output.debug } });
+          log.push({
+            [botId]: {
+              response: output.response,
+              debug: output.debug,
+              verdict: output.verdict,
+            },
+          });
         }
 
         // 将 bot 回复汇总给裁判作为下一轮的 request
@@ -187,20 +263,27 @@ export class MatchRunner {
         });
       }
 
-      // 超过最大轮次
-      this.logger.warn('对局超过最大轮次限制');
+      // 超过最大轮次 或 裁判异常退出
+      this.logger.warn('对局异常结束（超过最大轮次或裁判异常）');
       const scores: Record<string, number> = {};
       for (const botId of Object.keys(task.game)) {
         if (botId !== 'judger') scores[botId] = 0;
       }
-      const gameResult: GameResult = { scores, log, compile: compileResults };
+      const gameResult: GameResult = {
+        scores,
+        log,
+        compile: compileResults,
+      };
       await this.callbackService.finish(task.callback.finish, gameResult);
     } finally {
       // 清理策略资源和临时目录
       for (const ctx of botContexts.values()) {
         await strategy.cleanup(ctx);
       }
-      await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
+      this.dataStoreService.clearSessionData();
+      await fs
+        .rm(workDir, { recursive: true, force: true })
+        .catch(() => {});
     }
   }
 
@@ -211,7 +294,7 @@ export class MatchRunner {
         return new LongrunStrategy();
       case 'restart':
       default:
-        return new RestartStrategy(/* nsjailService 将由 DI 注入 */);
+        return new RestartStrategy(this.nsjailService);
     }
   }
 }

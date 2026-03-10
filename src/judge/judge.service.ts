@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bull';
-import { Queue } from 'bull';
+import { InjectQueue, Process, Processor } from '@nestjs/bull';
+import { Job, Queue } from 'bull';
+import { ConfigService } from '@nestjs/config';
 import { TaskDto } from './dto/task.dto';
 import { MatchRunner } from './match-runner';
 
@@ -11,12 +12,14 @@ export const JUDGE_QUEUE = 'judge';
  * 评测服务：接收任务、入队、消费队列
  */
 @Injectable()
+@Processor(JUDGE_QUEUE)
 export class JudgeService {
   private readonly logger = new Logger(JudgeService.name);
 
   constructor(
     @InjectQueue(JUDGE_QUEUE) private readonly judgeQueue: Queue,
     private readonly matchRunner: MatchRunner,
+    private readonly configService: ConfigService,
   ) {}
 
   /** 将评测任务加入队列 */
@@ -29,9 +32,26 @@ export class JudgeService {
     return String(job.id);
   }
 
-  /** 处理评测任务（由 Bull processor 调用） */
-  async processTask(task: TaskDto): Promise<void> {
-    this.logger.log('开始处理评测任务');
-    await this.matchRunner.run(task);
+  /** 获取信任 IP 列表 */
+  getTrustIps(): string[] {
+    const trustIp = this.configService.get<string>('TRUST_IP', '127.0.0.1');
+    return trustIp.split(',').map((ip) => ip.trim());
+  }
+
+  /** 获取并发能力 */
+  getConcurrency(): number {
+    return this.configService.get<number>('JUDGE_CAPABILITY', 15);
+  }
+
+  /** Bull 队列处理器：消费评测任务 */
+  @Process({ name: 'run', concurrency: 15 })
+  async processTask(job: Job<TaskDto>): Promise<void> {
+    this.logger.log(`开始处理评测任务: jobId=${job.id}`);
+    try {
+      await this.matchRunner.run(job.data);
+    } catch (err) {
+      this.logger.error(`评测任务失败: jobId=${job.id}, error=${err}`);
+      throw err;
+    }
   }
 }

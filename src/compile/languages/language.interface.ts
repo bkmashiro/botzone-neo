@@ -16,17 +16,18 @@ export interface ILanguage {
   /**
    * 获取编译命令
    * @param sourcePath 源代码文件路径
-   * @param outputPath 编译输出路径
+   * @param outputPath 编译输出路径（目录或文件，取决于语言）
    * @returns 编译命令和参数
    */
   getCompileCommand(sourcePath: string, outputPath: string): { cmd: string; args: string[] };
 
   /**
-   * 获取运行时可执行路径
-   * @param compiledPath 编译后文件路径（解释型语言为源文件路径）
-   * @returns 可执行路径
+   * 获取运行命令
+   * @param sourcePath 源文件路径
+   * @param outputPath 编译输出路径
+   * @returns 执行命令和参数（用于 spawn）
    */
-  getExecPath(compiledPath: string): string;
+  getRunCommand(sourcePath: string, outputPath: string): { cmd: string; args: string[] };
 
   /**
    * 获取沙箱中需要额外挂载的只读路径

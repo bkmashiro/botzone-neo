@@ -4,8 +4,10 @@
  * 根据语言和资源限制生成 nsjail 命令行参数
  */
 export interface NsjailOptions {
-  /** 可执行文件路径 */
+  /** 可执行文件路径（命令） */
   execPath: string;
+  /** 执行参数 */
+  execArgs?: string[];
   /** 工作目录（沙箱内可写） */
   workDir: string;
   /** 时间限制（秒） */
@@ -53,8 +55,11 @@ export function buildNsjailArgs(opts: NsjailOptions): string[] {
     }
   }
 
-  // 被执行的命令
+  // 被执行的命令及参数
   args.push('--', opts.execPath);
+  if (opts.execArgs) {
+    args.push(...opts.execArgs);
+  }
 
   return args;
 }

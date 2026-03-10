@@ -56,10 +56,10 @@ export interface BotInput {
   data: string;
   /** 全局持久化数据 */
   globaldata: string;
-  /** 时间限制（秒） */
-  timeLimit: number;
+  /** 时间限制（毫秒） */
+  time_limit: number;
   /** 内存限制（MB） */
-  memoryLimit: number;
+  memory_limit: number;
 }
 
 /** Bot 输出 */
@@ -68,6 +68,8 @@ export interface BotOutput {
   response: string;
   /** 调试信息 */
   debug?: string;
+  /** 运行时判定（TLE/RE/MLE 等，OK 或省略表示正常） */
+  verdict?: Verdict;
   /** 本局持久化数据（更新） */
   data?: string;
   /** 全局持久化数据（更新） */
@@ -92,8 +94,10 @@ export interface BotContext {
   id: string;
   /** 编程语言 */
   language: string;
-  /** 编译后可执行文件路径 */
-  execPath: string;
+  /** 执行命令 */
+  execCmd: string;
+  /** 执行参数（如 [] 或 ['/path/to/source.py']） */
+  execArgs: string[];
   /** 工作目录 */
   workDir: string;
   /** 资源限制 */
@@ -106,8 +110,10 @@ export interface CompileResult {
   verdict: Verdict;
   /** 编译输出信息 */
   message?: string;
-  /** 编译后可执行文件路径 */
-  execPath?: string;
+  /** 执行命令 */
+  execCmd?: string;
+  /** 执行参数 */
+  execArgs?: string[];
 }
 
 /** 对局结果 */

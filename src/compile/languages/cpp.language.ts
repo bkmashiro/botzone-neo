@@ -22,8 +22,8 @@ export class CppLanguage implements ILanguage {
     };
   }
 
-  getExecPath(compiledPath: string): string {
-    return compiledPath;
+  getRunCommand(_sourcePath: string, outputPath: string) {
+    return { cmd: outputPath, args: [] };
   }
 
   getReadonlyMounts(): string[] {

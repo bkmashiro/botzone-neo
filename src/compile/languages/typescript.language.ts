@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { ILanguage } from './language.interface';
 
 /**
@@ -9,7 +10,7 @@ export class TypeScriptLanguage implements ILanguage {
   readonly needsCompilation = true;
 
   getCompileCommand(sourcePath: string, outputPath: string) {
-    // 使用 tsc 编译为 JavaScript
+    // tsc 输出到 outputPath 目录，编译后文件为 outputPath/main.js
     return {
       cmd: 'tsc',
       args: [
@@ -22,9 +23,9 @@ export class TypeScriptLanguage implements ILanguage {
     };
   }
 
-  getExecPath(compiledPath: string): string {
-    // 编译后的 .js 文件通过 node 运行
-    return `node ${compiledPath}`;
+  getRunCommand(_sourcePath: string, outputPath: string) {
+    // tsc --outDir 产出 main.js 在 outputPath 目录下
+    return { cmd: 'node', args: [path.join(outputPath, 'main.js')] };
   }
 
   getReadonlyMounts(): string[] {

@@ -39,10 +39,11 @@ FROM node:20-bookworm-slim AS runtime
 
 WORKDIR /app
 
-# 安装运行时依赖：g++, python3, nsjail 运行时库
+# 安装运行时依赖：g++, python3 + pip, nsjail 运行时库
 RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     python3 \
+    python3-pip \
     libnl-3-200 \
     libnl-route-3-200 \
     libprotobuf32 \
