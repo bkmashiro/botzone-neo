@@ -11,3 +11,11 @@ coverage
 .cache
 .data
 docker-compose*.yml
+*.log
+.DS_Store
+test
+*.spec.ts
+jest.config.*
+.eslintrc*
+.prettierrc*
+.claude

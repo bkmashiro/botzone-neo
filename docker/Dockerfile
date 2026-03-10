@@ -56,6 +56,10 @@ RUN mkdir -p /usr/local/include/nlohmann \
     && curl -sL https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp \
        -o /usr/local/include/nlohmann/json.hpp
 
+# 安装 wasmtime（WASM backend 用）
+RUN curl https://wasmtime.dev/install.sh -sSf | bash \
+    && cp /root/.wasmtime/bin/wasmtime /usr/local/bin/wasmtime
+
 # 安装全局 TypeScript（Bot 编译用）
 RUN npm install -g typescript
 
