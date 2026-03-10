@@ -84,6 +84,13 @@ export class NsjailSandbox implements ISandbox {
     const timeLimitSec = this.clampLimit(rawTimeSec, 1, 300);
     const memoryMb = this.clampLimit(request.limit.memoryMb, 16, 4096);
 
+    if (timeLimitSec !== rawTimeSec) {
+      this.logger.warn(`时间限制被钳制: ${rawTimeSec}s → ${timeLimitSec}s`);
+    }
+    if (memoryMb !== request.limit.memoryMb) {
+      this.logger.warn(`内存限制被钳制: ${request.limit.memoryMb}MB → ${memoryMb}MB`);
+    }
+
     const args: string[] = [
       '--mode',
       'o',

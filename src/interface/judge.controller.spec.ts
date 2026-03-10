@@ -648,7 +648,7 @@ describe('JudgeController', () => {
     });
   });
 
-  describe('testcase count limit', () => {
+  describe('testcase count and size limits', () => {
     it('should reject more than 1000 testcases', async () => {
       const testcases = Array.from({ length: 1001 }, (_, i) => ({
         id: i,
@@ -667,6 +667,27 @@ describe('JudgeController', () => {
       };
 
       await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject when aggregate testcase size exceeds 100MB', async () => {
+      // Each testcase ~5MB input + ~5MB output = ~10MB, 11 testcases = ~110MB > 100MB
+      const testcases = Array.from({ length: 11 }, (_, i) => ({
+        id: i,
+        input: 'x'.repeat(5 * 1024 * 1024),
+        expectedOutput: 'y'.repeat(5 * 1024 * 1024),
+      }));
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases,
+        callback: { finish: 'http://example.com/callback' },
+        judgeMode: 'standard',
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow('累计大小超过 100MB 限制');
     });
   });
 });

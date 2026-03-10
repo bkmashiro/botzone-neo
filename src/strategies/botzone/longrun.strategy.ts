@@ -49,6 +49,8 @@ export class LongrunStrategy implements IBotRunStrategy {
         buffer += chunk.toString();
         if (buffer.length > MAX_BUFFER_SIZE) {
           this.logger.warn(`Bot ${bot.id} 输出超过 ${MAX_BUFFER_SIZE} 字节限制`);
+          this.signal('SIGKILL');
+          this.exited = true;
           settle({ response: '', debug: 'OLE: 输出超过大小限制' });
           return;
         }
@@ -61,6 +63,8 @@ export class LongrunStrategy implements IBotRunStrategy {
 
       const timeoutHandle = setTimeout(() => {
         this.logger.warn(`Bot ${bot.id} 超时 (${bot.limit.timeMs}ms)`);
+        this.signal('SIGKILL');
+        this.exited = true;
         settle({ response: '', debug: `TLE: 超过时间限制 ${bot.limit.timeMs}ms` });
       }, bot.limit.timeMs);
 
@@ -92,6 +96,7 @@ export class LongrunStrategy implements IBotRunStrategy {
       this.signal('SIGKILL');
     }
     this.child = null;
+    this.exited = false;
   }
 
   private spawnProcess(bot: BotRuntime): void {
