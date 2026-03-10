@@ -59,11 +59,6 @@ RUN mkdir -p /usr/local/include/nlohmann \
     && curl -sL https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp \
        -o /usr/local/include/nlohmann/json.hpp
 
-# 安装 wasmtime（WASM backend 用，pin 到稳定版本）
-ARG WASMTIME_VERSION=v29.0.1
-RUN curl -sL "https://github.com/bytecodealliance/wasmtime/releases/download/${WASMTIME_VERSION}/wasmtime-${WASMTIME_VERSION}-x86_64-linux.tar.xz" \
-    | tar -xJf - --strip-components=1 -C /usr/local/bin/ "wasmtime-${WASMTIME_VERSION}-x86_64-linux/wasmtime"
-
 # 安装全局 TypeScript（Bot 编译用，pin 到与项目一致的版本）
 RUN npm install -g typescript@5.9.3
 
