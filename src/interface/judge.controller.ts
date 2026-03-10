@@ -29,6 +29,7 @@ import {
   MIN_MEMORY_LIMIT_MB,
   MAX_MEMORY_LIMIT_MB,
   MAX_TESTCASE_LENGTH,
+  MAX_TOTAL_TESTCASE_SIZE,
 } from './dto/task.dto';
 
 @ApiTags('judge')
@@ -204,15 +205,29 @@ export class JudgeController {
     if (body['testcases'].length > 1000) {
       throw new BadRequestException('testcases 数量不能超过 1000');
     }
+    let totalTestcaseSize = 0;
     for (const tc of body['testcases'] as Array<Record<string, unknown>>) {
-      if (typeof tc['input'] === 'string' && tc['input'].length > MAX_TESTCASE_LENGTH) {
+      if (!tc || typeof tc !== 'object' || Array.isArray(tc)) {
+        throw new BadRequestException('testcase 必须是对象');
+      }
+      if (tc['id'] === undefined || tc['id'] === null) {
+        throw new BadRequestException('testcase 缺少 id');
+      }
+      if (typeof tc['input'] !== 'string') {
+        throw new BadRequestException(`testcase ${tc['id']}: input 必须是字符串`);
+      }
+      if (tc['input'].length > MAX_TESTCASE_LENGTH) {
         throw new BadRequestException(`testcase ${tc['id']}: input 超过 10MB 限制`);
       }
-      if (
-        typeof tc['expectedOutput'] === 'string' &&
-        tc['expectedOutput'].length > MAX_TESTCASE_LENGTH
-      ) {
+      if (typeof tc['expectedOutput'] !== 'string') {
+        throw new BadRequestException(`testcase ${tc['id']}: expectedOutput 必须是字符串`);
+      }
+      if (tc['expectedOutput'].length > MAX_TESTCASE_LENGTH) {
         throw new BadRequestException(`testcase ${tc['id']}: expectedOutput 超过 10MB 限制`);
+      }
+      totalTestcaseSize += (tc['input'] as string).length + (tc['expectedOutput'] as string).length;
+      if (totalTestcaseSize > MAX_TOTAL_TESTCASE_SIZE) {
+        throw new BadRequestException('testcases 累计大小超过 100MB 限制');
       }
     }
     const callback = body['callback'] as Record<string, unknown> | undefined;
@@ -328,6 +343,9 @@ export class JudgeController {
     const callback = body['callback'] as { update: string; finish: string };
     const initdata = body['initdata'] as string | object | undefined;
     const runMode = (body['runMode'] as string) ?? 'restart';
+    if (runMode !== 'restart' && runMode !== 'longrun') {
+      throw new BadRequestException(`runMode 必须为 restart 或 longrun`);
+    }
 
     const bots: BotSpec[] = Object.entries(game).map(([id, code]) => ({
       id,

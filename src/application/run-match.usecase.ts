@@ -110,7 +110,15 @@ export class RunMatchUseCase {
         } else {
           verdict = Verdict.SE;
           span.recordException(err instanceof Error ? err : new Error(String(err)));
-          throw err;
+          this.logger.error(`对局异常: ${err instanceof Error ? err.message : String(err)}`);
+          if (!match.isFinished) {
+            const scores: Record<string, number> = {};
+            for (const spec of task.bots) {
+              if (spec.id !== 'judger') scores[spec.id] = 0;
+            }
+            const result = match.finish(scores, compiles);
+            await this.callbackService.finish(task.callback.finish, result);
+          }
         }
       } finally {
         span.setAttribute('match.verdict', verdict);

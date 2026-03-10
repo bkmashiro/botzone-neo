@@ -82,6 +82,32 @@ describe('CallbackService (infrastructure)', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
+    it('should retry on 429 Too Many Requests', async () => {
+      const mockFetch = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValueOnce(new Response(null, { status: 429, statusText: 'Too Many Requests' }))
+        .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+      const finishPromise = service.finish('http://cb.test/finish', {});
+      await jest.advanceTimersByTimeAsync(1000);
+      await finishPromise;
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should retry on 408 Request Timeout', async () => {
+      const mockFetch = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValueOnce(new Response(null, { status: 408, statusText: 'Request Timeout' }))
+        .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+      const finishPromise = service.finish('http://cb.test/finish', {});
+      await jest.advanceTimersByTimeAsync(1000);
+      await finishPromise;
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
     it('should retry on 5xx response and succeed on retry', async () => {
       const mockFetch = jest
         .spyOn(global, 'fetch')

@@ -36,6 +36,8 @@ export const MIN_MEMORY_LIMIT_MB = 16;
 export const MAX_MEMORY_LIMIT_MB = 2048;
 /** 单个测试用例输入/输出最大长度（10MB） */
 export const MAX_TESTCASE_LENGTH = 10 * 1024 * 1024;
+/** 全部测试用例累计大小上限（100MB） */
+export const MAX_TOTAL_TESTCASE_SIZE = 100 * 1024 * 1024;
 
 // ── 公共 ──
 

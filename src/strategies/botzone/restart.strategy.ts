@@ -61,12 +61,12 @@ export class RestartStrategy implements IBotRunStrategy {
     try {
       const parsed: unknown = JSON.parse(firstLine);
       if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-        const output = parsed as BotOutput;
+        const output = parsed as Record<string, unknown>;
         return {
-          response: output.response ?? '',
-          debug: output.debug,
-          data: output.data,
-          globaldata: output.globaldata,
+          response: typeof output.response === 'string' ? output.response : '',
+          debug: typeof output.debug === 'string' ? output.debug : undefined,
+          data: typeof output.data === 'string' ? output.data : undefined,
+          globaldata: typeof output.globaldata === 'string' ? output.globaldata : undefined,
         };
       }
     } catch {

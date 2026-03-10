@@ -206,10 +206,14 @@ describe('RunMatchUseCase', () => {
       expect(result.scores).toEqual({ '0': 1, '1': 0 });
     });
 
-    it('should re-throw non-CompileError exceptions', async () => {
+    it('should call finish callback on non-CompileError exceptions (SE)', async () => {
       mockCompileService.compile.mockRejectedValue(new Error('disk full'));
 
-      await expect(useCase.execute(task)).rejects.toThrow('disk full');
+      await useCase.execute(task);
+
+      expect(mockCallbackService.finish).toHaveBeenCalledTimes(1);
+      const result = mockCallbackService.finish.mock.calls[0][1];
+      expect(result.scores).toEqual({ '0': 0 });
     });
   });
 
@@ -345,16 +349,18 @@ describe('RunMatchUseCase', () => {
       );
     });
 
-    it('should record SE verdict when an unexpected error is thrown', async () => {
+    it('should record SE verdict on unexpected error and still call finish', async () => {
       mockCompileService.compile.mockRejectedValue(new Error('unexpected'));
 
-      await expect(useCase.execute(task)).rejects.toThrow('unexpected');
+      await useCase.execute(task);
 
       expect(mockCounter.inc).toHaveBeenCalledWith(
         expect.objectContaining({ verdict: Verdict.SE }),
       );
       // Gauge should still be decremented even on error
       expect(mockGauge.dec).toHaveBeenCalledTimes(1);
+      // Finish callback should be called with SE result
+      expect(mockCallbackService.finish).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -436,7 +442,7 @@ describe('RunMatchUseCase', () => {
     it('should remove the work directory even when the match fails', async () => {
       mockCompileService.compile.mockRejectedValue(new Error('boom'));
 
-      await expect(useCase.execute(task)).rejects.toThrow('boom');
+      await useCase.execute(task);
 
       expect(fs.rm).toHaveBeenCalledWith('/tmp/botzone-abc123', { recursive: true, force: true });
     });

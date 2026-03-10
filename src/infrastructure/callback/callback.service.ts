@@ -12,7 +12,7 @@ const RETRY_BASE_DELAY_MS = 1000;
  * 回调服务：向调用方回报对局进度和最终结果
  *
  * - update: 进度回调，best-effort，不重试
- * - finish: 结果回调，最多重试 3 次（指数退避，仅对 5xx/网络错误重试）
+ * - finish: 结果回调，最多重试 3 次（指数退避，对 5xx/408/429/网络错误重试）
  * 所有请求强制 10 秒超时，防止回调 URL 无响应时阻塞评测流程。
  */
 @Injectable()
@@ -40,8 +40,13 @@ export class CallbackService {
           this.logger.log(`结果已回报: ${url}`);
           return;
         }
-        // 4xx 不重试（客户端错误）
-        if (response.status >= 400 && response.status < 500) {
+        // 4xx 不重试（客户端错误），但 408/429 是暂时性错误，允许重试
+        if (
+          response.status >= 400 &&
+          response.status < 500 &&
+          response.status !== 408 &&
+          response.status !== 429
+        ) {
           this.logger.warn(`结果回调失败 (${url}): ${response.status} ${response.statusText}`);
           return;
         }

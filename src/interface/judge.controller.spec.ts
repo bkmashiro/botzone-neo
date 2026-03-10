@@ -566,6 +566,88 @@ describe('JudgeController', () => {
     });
   });
 
+  describe('testcase field validation', () => {
+    it('should throw when testcase is not an object', async () => {
+      const body = {
+        ...ojBody,
+        testcases: ['not an object'],
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow('testcase 必须是对象');
+    });
+
+    it('should throw when testcase is missing id', async () => {
+      const body = {
+        ...ojBody,
+        testcases: [{ input: '1\n', expectedOutput: '1\n' }],
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow('testcase 缺少 id');
+    });
+
+    it('should throw when testcase input is not a string', async () => {
+      const body = {
+        ...ojBody,
+        testcases: [{ id: 1, input: 42, expectedOutput: '1\n' }],
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow('input 必须是字符串');
+    });
+
+    it('should throw when testcase expectedOutput is not a string', async () => {
+      const body = {
+        ...ojBody,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: null }],
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow('expectedOutput 必须是字符串');
+    });
+
+    it('should throw when testcase input is missing', async () => {
+      const body = {
+        ...ojBody,
+        testcases: [{ id: 1, expectedOutput: '1\n' }],
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow('input 必须是字符串');
+    });
+  });
+
+  describe('runMode validation', () => {
+    it('should throw when runMode is invalid', async () => {
+      const body = { ...botzoneBody, runMode: 'invalid' };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(
+        'runMode 必须为 restart 或 longrun',
+      );
+    });
+
+    it('should accept restart runMode', async () => {
+      const body = { ...botzoneBody, runMode: 'restart' };
+
+      const result = await controller.submitTask(body);
+      expect(result.jobId).toBe('job-456');
+    });
+
+    it('should accept longrun runMode', async () => {
+      const body = { ...botzoneBody, runMode: 'longrun' };
+
+      const result = await controller.submitTask(body);
+      expect(result.jobId).toBe('job-456');
+    });
+
+    it('should default to restart when runMode is omitted', async () => {
+      const result = await controller.submitTask(botzoneBody);
+
+      expect(result.jobId).toBe('job-456');
+      expect(mockQueueService.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          task: expect.objectContaining({ runMode: 'restart' }),
+        }),
+      );
+    });
+  });
+
   describe('testcase count limit', () => {
     it('should reject more than 1000 testcases', async () => {
       const testcases = Array.from({ length: 1001 }, (_, i) => ({

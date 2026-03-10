@@ -33,38 +33,42 @@ export class LongrunStrategy implements IBotRunStrategy {
     const inputLine = JSON.stringify(input) + '\n';
 
     return new Promise<BotOutput>((resolve) => {
-      const timeoutHandle = setTimeout(() => {
-        this.logger.warn(`Bot ${bot.id} 超时 (${bot.limit.timeMs}ms)`);
-        resolve({ response: '', debug: `TLE: 超过时间限制 ${bot.limit.timeMs}ms` });
-      }, bot.limit.timeMs);
-
       // 收集一行 stdout 输出（限制缓冲区大小）
       let buffer = '';
+      let settled = false;
+
+      const settle = (result: BotOutput): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutHandle);
+        this.child?.stdout?.off('data', onData);
+        resolve(result);
+      };
+
       const onData = (chunk: Buffer): void => {
         buffer += chunk.toString();
         if (buffer.length > MAX_BUFFER_SIZE) {
-          clearTimeout(timeoutHandle);
-          this.child?.stdout?.off('data', onData);
           this.logger.warn(`Bot ${bot.id} 输出超过 ${MAX_BUFFER_SIZE} 字节限制`);
-          resolve({ response: '', debug: 'OLE: 输出超过大小限制' });
+          settle({ response: '', debug: 'OLE: 输出超过大小限制' });
           return;
         }
         const newlineIdx = buffer.indexOf('\n');
         if (newlineIdx !== -1) {
-          clearTimeout(timeoutHandle);
-          this.child?.stdout?.off('data', onData);
           const line = buffer.slice(0, newlineIdx).trim();
-          resolve(this.parseOutput(line));
+          settle(this.parseOutput(line));
         }
       };
+
+      const timeoutHandle = setTimeout(() => {
+        this.logger.warn(`Bot ${bot.id} 超时 (${bot.limit.timeMs}ms)`);
+        settle({ response: '', debug: `TLE: 超过时间限制 ${bot.limit.timeMs}ms` });
+      }, bot.limit.timeMs);
 
       this.child?.stdout?.on('data', onData);
 
       // 进程已退出则立即返回错误
       if (this.exited || !this.child) {
-        clearTimeout(timeoutHandle);
-        this.child?.stdout?.off('data', onData);
-        resolve({ response: '', debug: '进程已退出' });
+        settle({ response: '', debug: '进程已退出' });
         return;
       }
 
@@ -72,9 +76,7 @@ export class LongrunStrategy implements IBotRunStrategy {
       try {
         this.child?.stdin?.write(inputLine);
       } catch {
-        clearTimeout(timeoutHandle);
-        this.child?.stdout?.off('data', onData);
-        resolve({ response: '', debug: 'EPIPE: 无法写入进程 stdin' });
+        settle({ response: '', debug: 'EPIPE: 无法写入进程 stdin' });
       }
     });
   }
@@ -114,6 +116,10 @@ export class LongrunStrategy implements IBotRunStrategy {
       this.exited = true;
       this.logger.error(`Bot ${bot.id} stdin 错误: ${err.message}`);
     });
+
+    // Prevent unhandled stream errors on stdout/stderr
+    this.child.stdout?.on('error', () => {});
+    this.child.stderr?.on('error', () => {});
   }
 
   private signal(sig: NodeJS.Signals): void {
@@ -128,12 +134,12 @@ export class LongrunStrategy implements IBotRunStrategy {
     try {
       const parsed: unknown = JSON.parse(line);
       if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-        const output = parsed as BotOutput;
+        const output = parsed as Record<string, unknown>;
         return {
-          response: output.response ?? '',
-          debug: output.debug,
-          data: output.data,
-          globaldata: output.globaldata,
+          response: typeof output.response === 'string' ? output.response : '',
+          debug: typeof output.debug === 'string' ? output.debug : undefined,
+          data: typeof output.data === 'string' ? output.data : undefined,
+          globaldata: typeof output.globaldata === 'string' ? output.globaldata : undefined,
         };
       }
     } catch {

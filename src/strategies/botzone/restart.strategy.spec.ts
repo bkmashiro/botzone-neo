@@ -131,5 +131,20 @@ describe('RestartStrategy', () => {
       expect(output.response).toBe('');
       expect(output.data).toBe('d1');
     });
+
+    it('非字符串 data/globaldata 字段被忽略', () => {
+      const output = strategy.parseOutput(
+        '{"response":"ok","data":42,"globaldata":{"key":"val"}}\n',
+      );
+      expect(output.response).toBe('ok');
+      expect(output.data).toBeUndefined();
+      expect(output.globaldata).toBeUndefined();
+    });
+
+    it('非字符串 response 字段 → 默认空字符串', () => {
+      const output = strategy.parseOutput('{"response":123,"debug":true}\n');
+      expect(output.response).toBe('');
+      expect(output.debug).toBeUndefined();
+    });
   });
 });
