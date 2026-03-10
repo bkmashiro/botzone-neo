@@ -458,6 +458,37 @@ describe('RunMatchUseCase', () => {
       expect(result.scores).toEqual({ '0': 0 });
     });
 
+    it('should break when judge output is valid JSON but missing command/content', async () => {
+      mockCompileService.compile.mockResolvedValue(compiledBot);
+
+      // Judge returns valid JSON but no command/content
+      mockSandbox.execute.mockResolvedValueOnce(
+        sandboxOk(JSON.stringify({ response: JSON.stringify({ data: 42 }) })),
+      );
+
+      await useCase.execute(task);
+
+      expect(mockCallbackService.finish).toHaveBeenCalledTimes(1);
+      const result = mockCallbackService.finish.mock.calls[0][1];
+      expect(result.scores).toEqual({ '0': 0 });
+    });
+
+    it('should break when no judger bot exists in the task', async () => {
+      const noJudgerTask: MatchTask = {
+        ...task,
+        bots: [
+          { id: '0', language: 'cpp', source: 'bot code', limit: { timeMs: 1000, memoryMb: 256 } },
+        ],
+      };
+      mockCompileService.compile.mockResolvedValue(compiledBot);
+
+      await useCase.execute(noJudgerTask);
+
+      expect(mockCallbackService.finish).toHaveBeenCalledTimes(1);
+      const result = mockCallbackService.finish.mock.calls[0][1];
+      expect(result.scores).toEqual({ '0': 0 });
+    });
+
     it('should break the loop when judge output is not valid JSON', async () => {
       mockCompileService.compile.mockResolvedValue(compiledBot);
 

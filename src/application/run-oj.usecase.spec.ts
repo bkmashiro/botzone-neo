@@ -510,6 +510,27 @@ describe('RunOJUseCase', () => {
     expect(result.compile.message).toContain('checker');
   });
 
+  it('should rethrow non-CompileError from checker compile', async () => {
+    mockCompileService.compile
+      .mockResolvedValueOnce(compiledBot)
+      .mockRejectedValueOnce(new Error('disk full'));
+
+    const task = makeTask({
+      judgeMode: 'checker',
+      checkerLanguage: 'cpp',
+      checkerSource: 'checker code',
+    });
+
+    await expect(useCase.execute(task)).rejects.toThrow('disk full');
+  });
+
+  it('should not throw when temp dir cleanup fails', async () => {
+    (fs.rm as jest.Mock).mockRejectedValue(new Error('ENOENT'));
+    const task = makeTask();
+
+    await expect(useCase.execute(task)).resolves.toBeUndefined();
+  });
+
   // ── 10. Standard mode (DiffChecker) is used by default ────
 
   it('should use DiffChecker when judgeMode is "standard"', async () => {
