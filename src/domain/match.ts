@@ -7,6 +7,7 @@
 
 import { Verdict } from './verdict';
 import { BotSpec } from './bot';
+import { JudgerSpec } from '../domain/strategies/strategy.factory';
 
 /** 评测任务类型 */
 export type TaskType = 'botzone' | 'oj';
@@ -33,6 +34,12 @@ export interface MatchTask {
   initdata?: string;
   /** 运行模式 */
   runMode: RunMode;
+  /**
+   * User-submitted judge program (optional).
+   * When present, a JudgeProgramRunner is used instead of the legacy "judger bot" approach.
+   * The judger communicates via the simplified round-based stdio protocol.
+   */
+  judger?: JudgerSpec;
 }
 
 /** 编译结果汇总（每个 bot 的编译状态） */

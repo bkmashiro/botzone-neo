@@ -26,6 +26,9 @@ import { ISandbox, SANDBOX_TOKEN } from '../infrastructure/sandbox/sandbox.inter
 import { IBotRunStrategy } from '../strategies/bot-run-strategy.interface';
 import { RestartStrategy } from '../strategies/botzone/restart.strategy';
 import { LongrunStrategy } from '../strategies/botzone/longrun.strategy';
+import { IStrategy } from '../domain/interfaces/strategy.interface';
+import { createStrategy } from '../domain/strategies/strategy.factory';
+import { parseBotOutput, BotOutputParseError } from '../strategies/botzone/bot-output-parser';
 
 /** 默认全局对局超时: 5 分钟 */
 const DEFAULT_MAX_MATCH_DURATION_MS = 5 * 60 * 1000;
@@ -90,11 +93,41 @@ export class RunMatchUseCase {
       const startTime = Date.now();
       let verdict = Verdict.OK;
 
+      // User-defined judge path vs legacy judger-bot path
+      let judgeStrategy: IStrategy | null = null;
+
       try {
-        const innerVerdict = await Promise.race([
-          this.executeInner(task, match, workDir, strategy, bots, histories, compiles, session),
-          timeoutPromise,
-        ]);
+        let innerPromise: Promise<Verdict | void>;
+
+        if (task.judger?.source?.trim()) {
+          // New protocol: user-submitted judge program
+          judgeStrategy = await createStrategy(task.judger, this.compileService, workDir);
+          innerPromise = this.executeWithUserJudge(
+            task,
+            match,
+            workDir,
+            strategy,
+            bots,
+            histories,
+            compiles,
+            session,
+            judgeStrategy,
+          );
+        } else {
+          // Legacy protocol: judger is just another bot in task.bots
+          innerPromise = this.executeInner(
+            task,
+            match,
+            workDir,
+            strategy,
+            bots,
+            histories,
+            compiles,
+            session,
+          );
+        }
+
+        const innerVerdict = await Promise.race([innerPromise, timeoutPromise]);
         if (innerVerdict) verdict = innerVerdict;
       } catch (err) {
         if (err instanceof MatchTimeoutError) {
@@ -130,6 +163,9 @@ export class RunMatchUseCase {
         clearTimeout(timeoutHandle);
         for (const bot of bots.values()) {
           await strategy.cleanup(bot);
+        }
+        if (judgeStrategy) {
+          await judgeStrategy.cleanup();
         }
         session.clear();
         await fs.rm(workDir, { recursive: true, force: true }).catch((cleanupErr) => {
@@ -392,5 +428,175 @@ export class RunMatchUseCase {
       default:
         return new RestartStrategy(this.sandbox);
     }
+  }
+
+  /**
+   * New-protocol match loop using a user-submitted judge program (IStrategy).
+   *
+   * The judge receives bot responses each round and returns the next set of
+   * commands for the bots plus a verdict ('continue' | 'finish' | 'error').
+   */
+  private async executeWithUserJudge(
+    task: MatchTask,
+    match: Match,
+    workDir: string,
+    botRunStrategy: IBotRunStrategy,
+    bots: Map<string, BotRuntime>,
+    histories: Map<string, { requests: string[]; responses: string[] }>,
+    compiles: CompileSummary[],
+    session: SessionScope,
+    judgeStrategy: IStrategy,
+  ): Promise<Verdict | void> {
+    // ── Phase 1: compile player bots ──
+    // (judger is compiled separately before calling this method)
+    for (const spec of task.bots) {
+      this.logger.debug(`Compiling bot: id=${spec.id}, language=${spec.language}`);
+      const compileSummary = await this.compileBot(spec, workDir, bots);
+      compiles.push(compileSummary);
+
+      if (compileSummary.verdict !== Verdict.OK) {
+        this.logger.warn(
+          `Bot compilation failed: id=${spec.id}, verdict=${compileSummary.verdict}`,
+        );
+        const scores: Record<string, number> = {};
+        for (const b of task.bots) {
+          scores[b.id] = b.id === spec.id ? 0 : 1;
+        }
+        const result = match.finish(scores, compiles);
+        await this.callbackService.finish(task.callback.finish, result);
+        return Verdict.CE;
+      }
+      histories.set(spec.id, { requests: [], responses: [] });
+    }
+
+    // ── Phase 2: game loop ──
+    let botResponses: Record<string, unknown> = {};
+
+    while (match.hasRoundsLeft) {
+      const round = match.nextRound();
+      this.logger.debug(`User-judge round ${round}`);
+
+      // Ask the judge for this round's commands
+      const judgeOut = await judgeStrategy.nextRound(botResponses);
+
+      const roundDebug: Record<string, string | null> = {
+        judge: judgeOut.debug ?? null,
+        judge_stderr: judgeOut.stderr ?? null,
+      };
+
+      if (judgeOut.verdict === 'error') {
+        this.logger.error(`Judge error at round ${round}: ${judgeOut.error}`);
+        const scores: Record<string, number> = {};
+        for (const spec of task.bots) scores[spec.id] = 0;
+        match.addLog({ round, judgeError: judgeOut.error, debug: roundDebug });
+        const result = match.finish(scores, compiles);
+        await this.callbackService.finish(task.callback.finish, result);
+        return;
+      }
+
+      if (judgeOut.verdict === 'finish') {
+        this.logger.log(`Game finished by judge at round ${round}`);
+        const scores = judgeOut.scores ?? {};
+        match.addLog({ round, display: judgeOut.display, scores, debug: roundDebug });
+        const result = match.finish(scores, compiles);
+        await this.callbackService.finish(task.callback.finish, result);
+        return;
+      }
+
+      // verdict === 'continue': run each bot
+      const botEntries = Object.entries(judgeOut.commands).filter(([id]) => bots.has(id));
+
+      const botResults = await Promise.all(
+        botEntries.map(async ([botId, command]) => {
+          const bot = bots.get(botId);
+          const history = histories.get(botId);
+          if (!bot || !history)
+            return { botId, move: null as unknown, debug: undefined, stderr: undefined };
+
+          // The judge command for this bot becomes the next request in its history
+          const requestStr = typeof command === 'string' ? command : JSON.stringify(command);
+          history.requests.push(requestStr);
+
+          const botInput = await this.buildBotInput(bot, history, session);
+          const output: BotOutput = await botRunStrategy.runRound(bot, botInput);
+          await botRunStrategy.afterRound(bot);
+          await this.updatePersistentData(botId, output, session);
+
+          // Enhanced output parsing: raw value OR {"move": ..., "debug": "..."}
+          let move: unknown;
+          let moveDebug: string | undefined;
+
+          try {
+            const parsed = parseBotOutput(output.response, output.debug ?? '');
+            move = parsed.move;
+            moveDebug = parsed.debug;
+          } catch (err) {
+            if (err instanceof BotOutputParseError) {
+              this.logger.warn(`Bot ${botId} output parse error: ${err.message}`);
+              move = output.response; // fall back to raw response
+            } else {
+              throw err;
+            }
+          }
+
+          history.responses.push(String(move));
+          return { botId, move, debug: moveDebug, stderr: output.debug };
+        }),
+      );
+
+      // Forfeit check: any bot that gave no output
+      const forfeitedBot = botResults.find(
+        (r) => r.move === null || r.move === undefined || r.move === '',
+      );
+      if (forfeitedBot) {
+        this.logger.warn(`Bot ${forfeitedBot.botId} forfeited (no response)`);
+        const scores: Record<string, number> = {};
+        for (const spec of task.bots) scores[spec.id] = 0;
+        const result = {
+          ...match.finish(scores, compiles),
+          verdict: 'forfeit',
+          forfeitedBot: forfeitedBot.botId,
+        };
+        await this.callbackService.finish(task.callback.finish, result);
+        return;
+      }
+
+      // Build per-bot debug entries for the round log
+      for (const { botId, debug, stderr } of botResults) {
+        roundDebug[`bot_${botId}`] = debug ?? null;
+        roundDebug[`bot_${botId}_stderr`] = stderr ?? null;
+      }
+
+      // Collect bot responses for the next round
+      botResponses = {};
+      for (const { botId, move } of botResults) {
+        botResponses[botId] = move;
+      }
+
+      match.addLog({
+        round,
+        judgeCmd: judgeOut.commands,
+        display: judgeOut.display,
+        botResponses,
+        debug: roundDebug,
+      });
+
+      if (task.callback.update) {
+        try {
+          await this.callbackService.update(task.callback.update, {
+            round,
+            display: judgeOut.display,
+          });
+        } catch (updateErr) {
+          this.logger.warn(`Update callback failed (round=${round}): ${updateErr}`);
+        }
+      }
+    }
+
+    this.logger.warn('Match exceeded maximum round limit');
+    const scores: Record<string, number> = {};
+    for (const spec of task.bots) scores[spec.id] = 0;
+    const result = match.finish(scores, compiles);
+    await this.callbackService.finish(task.callback.finish, result);
   }
 }
