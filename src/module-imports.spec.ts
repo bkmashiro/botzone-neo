@@ -8,7 +8,8 @@ jest.mock('@willsoto/nestjs-prometheus', () => ({
   makeCounterProvider: jest.fn().mockReturnValue({ provide: 'counter', useValue: {} }),
   makeHistogramProvider: jest.fn().mockReturnValue({ provide: 'histogram', useValue: {} }),
   makeGaugeProvider: jest.fn().mockReturnValue({ provide: 'gauge', useValue: {} }),
-  InjectMetric: () => (_target: unknown, _key: string | symbol | undefined, _index?: number) => undefined,
+  InjectMetric: () => (_target: unknown, _key: string | symbol | undefined, _index?: number) =>
+    undefined,
 }));
 
 beforeEach(() => {
