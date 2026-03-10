@@ -94,20 +94,25 @@ export class JudgeQueueService implements OnModuleInit, OnApplicationShutdown {
       type: (job.data as JudgeJobData)?.type,
       ...(job.finishedOn ? { finishedOn: new Date(job.finishedOn).toISOString() } : {}),
       ...(job.failedReason ? { failedReason: job.failedReason } : {}),
+      ...(job.returnvalue !== undefined && job.returnvalue !== null
+        ? { result: job.returnvalue }
+        : {}),
     };
   }
 
-  private async processTask(job: Job<JudgeJobData>): Promise<void> {
+  private async processTask(job: Job<JudgeJobData>): Promise<unknown> {
     const { type, task } = job.data;
     this.logger.log(`开始处理评测任务: jobId=${job.id}, type=${type}`);
 
     try {
+      let result: unknown;
       if (type === 'botzone') {
-        await this.runMatchUseCase.execute(task as MatchTask);
+        result = await this.runMatchUseCase.execute(task as MatchTask);
       } else {
-        await this.runOJUseCase.execute(task as OJTask);
+        result = await this.runOJUseCase.execute(task as OJTask);
       }
       this.logger.log(`评测任务完成: jobId=${job.id}`);
+      return result;
     } catch (err) {
       this.logger.error(`评测任务失败: jobId=${job.id}, error=${err}`);
       throw err;

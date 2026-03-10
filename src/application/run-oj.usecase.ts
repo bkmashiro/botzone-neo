@@ -34,7 +34,7 @@ export class RunOJUseCase {
     @InjectMetric('botzone_judge_duration_ms') private readonly judgeDurationMs: Histogram,
   ) {}
 
-  async execute(task: OJTask): Promise<void> {
+  async execute(task: OJTask): Promise<OJResult> {
     const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'oj-'));
     this.logger.log(`OJ 评测开始: language=${task.language}, testcases=${task.testcases.length}`);
     const startTime = Date.now();
@@ -57,7 +57,7 @@ export class RunOJUseCase {
             compile: { verdict: Verdict.CE, message: err.message },
           };
           await this.callbackService.finish(task.callback.finish, result);
-          return;
+          return result;
         }
         throw err;
       }
@@ -85,7 +85,7 @@ export class RunOJUseCase {
               compile: { verdict: Verdict.CE, message: `checker: ${err.message}` },
             };
             await this.callbackService.finish(task.callback.finish, result);
-            return;
+            return result;
           }
           throw err;
         }
@@ -182,6 +182,7 @@ export class RunOJUseCase {
         compile: { verdict: Verdict.OK },
       };
       await this.callbackService.finish(task.callback.finish, result);
+      return result;
     } finally {
       this.judgeRequestsTotal.inc({ type: 'oj', verdict });
       this.judgeDurationMs.observe({ type: 'oj' }, Date.now() - startTime);
