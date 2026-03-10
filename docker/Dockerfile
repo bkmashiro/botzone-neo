@@ -91,7 +91,7 @@ ENV NODE_ENV=production
 EXPOSE 3001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:3001/health || exit 1
+  CMD curl -f http://127.0.0.1:3001/health || exit 1
 
 # nsjail 需要 root 权限来创建 namespace，所以保持 root 运行
 # 但应用本身通过 nsjail 将子进程降权到 nobody
