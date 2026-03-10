@@ -198,6 +198,85 @@ describe('RestartStrategy', () => {
     });
   });
 
+  describe('spawn 错误处理', () => {
+    it('应该在 spawn error 时返回 SE verdict', async () => {
+      const fakeChild = createFakeChild(0, '', '', { hang: true });
+      mockSpawn.mockReturnValue(fakeChild as any);
+
+      const promise = strategy.runRound(makeBotCtx(), makeBotInput());
+
+      // Emit error on the child process
+      fakeChild.emit('error', new Error('spawn ENOENT'));
+
+      const result = await promise;
+      expect(result.response).toBe('');
+      expect(result.verdict).toBe('SE');
+      expect(result.debug).toContain('spawn ENOENT');
+    });
+  });
+
+  describe('nsjail 模式', () => {
+    it('应该通过 nsjail 执行并解析正常输出', async () => {
+      const mockNsjail = {
+        execute: jest.fn().mockResolvedValue({
+          stdout: JSON.stringify({ response: 'nsjail-ok' }),
+          stderr: '',
+          exitCode: 0,
+          timedOut: false,
+        }),
+      };
+
+      // Mock child_process.execSync to make nsjail "available"
+      const cp = jest.requireActual('child_process');
+      jest.spyOn(cp, 'execSync').mockReturnValue(Buffer.from('/usr/bin/nsjail'));
+
+      const nsjailStrategy = new RestartStrategy(mockNsjail as any);
+
+      const result = await nsjailStrategy.runRound(makeBotCtx(), makeBotInput());
+      expect(result.response).toBe('nsjail-ok');
+    });
+
+    it('应该在 nsjail 超时时返回 TLE', async () => {
+      const mockNsjail = {
+        execute: jest.fn().mockResolvedValue({
+          stdout: '',
+          stderr: '',
+          exitCode: -1,
+          timedOut: true,
+        }),
+      };
+
+      const cp = jest.requireActual('child_process');
+      jest.spyOn(cp, 'execSync').mockReturnValue(Buffer.from('/usr/bin/nsjail'));
+
+      const nsjailStrategy = new RestartStrategy(mockNsjail as any);
+
+      const result = await nsjailStrategy.runRound(makeBotCtx(), makeBotInput());
+      expect(result.verdict).toBe('TLE');
+      expect(result.debug).toContain('TLE');
+    });
+
+    it('应该在 nsjail 非零退出时返回 RE', async () => {
+      const mockNsjail = {
+        execute: jest.fn().mockResolvedValue({
+          stdout: '',
+          stderr: 'segfault',
+          exitCode: 139,
+          timedOut: false,
+        }),
+      };
+
+      const cp = jest.requireActual('child_process');
+      jest.spyOn(cp, 'execSync').mockReturnValue(Buffer.from('/usr/bin/nsjail'));
+
+      const nsjailStrategy = new RestartStrategy(mockNsjail as any);
+
+      const result = await nsjailStrategy.runRound(makeBotCtx(), makeBotInput());
+      expect(result.verdict).toBe('RE');
+      expect(result.debug).toContain('segfault');
+    });
+  });
+
   describe('生命周期方法', () => {
     it('afterRound 应该正常执行不抛异常', async () => {
       await expect(strategy.afterRound(makeBotCtx())).resolves.toBeUndefined();
