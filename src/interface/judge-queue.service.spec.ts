@@ -47,7 +47,7 @@ describe('JudgeQueueService', () => {
     it('should register processor with configured concurrency', async () => {
       mockQueue.process = jest.fn();
       await service.onModuleInit();
-      expect(mockConfig.get).toHaveBeenCalledWith('JUDGE_CONCURRENCY', 15);
+      expect(mockConfig.get).toHaveBeenCalledWith('JUDGE_CONCURRENCY', '15');
       expect(mockQueue.process).toHaveBeenCalledWith('run', 15, expect.any(Function));
     });
   });

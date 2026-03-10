@@ -513,4 +513,38 @@ describe('RunMatchUseCase', () => {
       expect(mockCallbackService.finish).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('callback error handling', () => {
+    it('should continue match when update callback fails', async () => {
+      mockCompileService.compile.mockResolvedValue(compiledBot);
+      mockCallbackService.update.mockRejectedValue(new Error('network error'));
+
+      // Round 1: request bot 0
+      mockSandbox.execute
+        .mockResolvedValueOnce(
+          sandboxOk(
+            JSON.stringify({
+              response: JSON.stringify({ command: 'request', content: { '0': 'play' } }),
+            }),
+          ),
+        )
+        .mockResolvedValueOnce(sandboxOk(JSON.stringify({ response: 'move' })))
+        // Round 2: finish
+        .mockResolvedValueOnce(
+          sandboxOk(
+            JSON.stringify({
+              response: JSON.stringify({ command: 'finish', content: { '0': 1 } }),
+            }),
+          ),
+        );
+
+      // Should not throw despite update callback failure
+      await expect(useCase.execute(task)).resolves.toBeUndefined();
+
+      // Finish callback should still be called
+      expect(mockCallbackService.finish).toHaveBeenCalledTimes(1);
+      const result = mockCallbackService.finish.mock.calls[0][1];
+      expect(result.scores).toEqual({ '0': 1 });
+    });
+  });
 });

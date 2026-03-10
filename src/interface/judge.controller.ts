@@ -113,8 +113,12 @@ export class JudgeController {
   /** 验证 Botzone 任务参数 */
   private validateBotzoneTask(body: Record<string, unknown>): void {
     const game = body['game'];
-    if (!game || typeof game !== 'object') {
+    if (!game || typeof game !== 'object' || Array.isArray(game)) {
       throw new BadRequestException('缺少 game 字段');
+    }
+    const gameEntries = Object.entries(game as Record<string, unknown>);
+    if (gameEntries.length === 0) {
+      throw new BadRequestException('game 对象不能为空');
     }
     const callback = body['callback'] as Record<string, unknown> | undefined;
     if (!callback || typeof callback !== 'object' || !callback['finish']) {
@@ -124,7 +128,11 @@ export class JudgeController {
     if (callback['update']) {
       this.validateUrl(String(callback['update']), 'callback.update');
     }
-    for (const [id, code] of Object.entries(game as Record<string, Record<string, unknown>>)) {
+    for (const [id, rawCode] of gameEntries) {
+      if (!rawCode || typeof rawCode !== 'object' || Array.isArray(rawCode)) {
+        throw new BadRequestException(`${id}: 必须是对象`);
+      }
+      const code = rawCode as Record<string, unknown>;
       if (!code['language'] || typeof code['language'] !== 'string') {
         throw new BadRequestException(`${id}: 缺少 language`);
       }

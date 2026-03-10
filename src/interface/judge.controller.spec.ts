@@ -185,6 +185,36 @@ describe('JudgeController', () => {
 
       await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
     });
+
+    it('should throw when game object is empty', async () => {
+      const body = {
+        type: 'botzone',
+        game: {},
+        callback: { update: 'http://update', finish: 'http://finish' },
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow('game 对象不能为空');
+    });
+
+    it('should throw when game is an array', async () => {
+      const body = {
+        type: 'botzone',
+        game: [{ language: 'cpp', source: 'code', limit: { time: 1000, memory: 256 } }],
+        callback: { update: 'http://update', finish: 'http://finish' },
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw when bot entry is not an object', async () => {
+      const body = {
+        type: 'botzone',
+        game: { judger: 'invalid' },
+        callback: { update: 'http://update', finish: 'http://finish' },
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow('必须是对象');
+    });
   });
 
   describe('validateOJTask', () => {

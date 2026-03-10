@@ -195,7 +195,12 @@ export class RunMatchUseCase {
       let judgeCmd: JudgeCommand;
       try {
         const parsed = JSON.parse(judgerOutput.response) as Record<string, unknown>;
-        if (!parsed.command || !parsed.content || typeof parsed.content !== 'object') {
+        if (
+          (parsed.command !== 'request' && parsed.command !== 'finish') ||
+          !parsed.content ||
+          typeof parsed.content !== 'object' ||
+          Array.isArray(parsed.content)
+        ) {
           this.logger.error(`裁判输出格式无效: 缺少 command 或 content`);
           break;
         }
@@ -243,10 +248,14 @@ export class RunMatchUseCase {
       match.addLog({ round, judgeCmd, botResponses });
       judgerHistory.requests.push(JSON.stringify(botResponses));
 
-      await this.callbackService.update(task.callback.update, {
-        round,
-        display: judgeCmd.display,
-      });
+      try {
+        await this.callbackService.update(task.callback.update, {
+          round,
+          display: judgeCmd.display,
+        });
+      } catch (updateErr) {
+        this.logger.warn(`进度回调失败 (round=${round}): ${updateErr}`);
+      }
     }
 
     this.logger.warn('对局超过最大轮次限制');
