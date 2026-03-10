@@ -41,7 +41,7 @@ export class JudgeQueueService implements OnModuleInit, OnApplicationShutdown {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    const concurrency = this.configService.get<number>('JUDGE_CONCURRENCY', 15);
+    const concurrency = parseInt(this.configService.get<string>('JUDGE_CONCURRENCY', '15'), 10);
     this.judgeQueue.process('run', concurrency, (job: Job<JudgeJobData>) => this.processTask(job));
     this.logger.log(`评测队列已启动，并发数: ${concurrency}`);
   }
