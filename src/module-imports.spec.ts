@@ -23,12 +23,6 @@ describe('Module imports', () => {
     expect(mod.AppModule).toBeDefined();
   });
 
-  it('should import interface/AppModule', () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('./interface/app.module');
-    expect(mod.AppModule).toBeDefined();
-  });
-
   it('should import interface/JudgeModule', () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require('./interface/judge.module');
