@@ -7,6 +7,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { spawn, ChildProcess } from 'child_process';
+import * as path from 'path';
 import { ISandbox, SandboxRequest, SandboxResult, MAX_OUTPUT_BYTES } from './sandbox.interface';
 
 @Injectable()
@@ -123,9 +124,14 @@ export class NsjailSandbox implements ISandbox {
       '0:65534:1',
     ];
 
-    // 语言特定的额外只读挂载
+    // 语言特定的额外只读挂载（验证路径安全性）
     for (const mount of request.compiled.readonlyMounts) {
-      args.push('--mount', `${mount}:${mount}:ro`);
+      const resolved = path.resolve(mount);
+      if (!mount || mount !== resolved || mount.includes(':')) {
+        this.logger.warn(`跳过不安全的挂载路径: "${mount}"`);
+        continue;
+      }
+      args.push('--mount', `${resolved}:${resolved}:ro`);
     }
 
     // 被执行的命令

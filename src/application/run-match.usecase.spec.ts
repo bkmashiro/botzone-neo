@@ -514,6 +514,42 @@ describe('RunMatchUseCase', () => {
     });
   });
 
+  describe('judge command validation', () => {
+    it('should reject judge output with invalid command value', async () => {
+      mockCompileService.compile.mockResolvedValue(compiledBot);
+      mockSandbox.execute.mockResolvedValueOnce(
+        sandboxOk(
+          JSON.stringify({
+            response: JSON.stringify({ command: 'invalid', content: { '0': 'go' } }),
+          }),
+        ),
+      );
+
+      await useCase.execute(task);
+
+      expect(mockCallbackService.finish).toHaveBeenCalledTimes(1);
+      const result = mockCallbackService.finish.mock.calls[0][1];
+      expect(result.scores).toEqual({ '0': 0 });
+    });
+
+    it('should reject judge output with array content instead of object', async () => {
+      mockCompileService.compile.mockResolvedValue(compiledBot);
+      mockSandbox.execute.mockResolvedValueOnce(
+        sandboxOk(
+          JSON.stringify({
+            response: JSON.stringify({ command: 'request', content: ['item1', 'item2'] }),
+          }),
+        ),
+      );
+
+      await useCase.execute(task);
+
+      expect(mockCallbackService.finish).toHaveBeenCalledTimes(1);
+      const result = mockCallbackService.finish.mock.calls[0][1];
+      expect(result.scores).toEqual({ '0': 0 });
+    });
+  });
+
   describe('callback error handling', () => {
     it('should continue match when update callback fails', async () => {
       mockCompileService.compile.mockResolvedValue(compiledBot);

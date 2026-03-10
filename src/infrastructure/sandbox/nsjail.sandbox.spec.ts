@@ -176,4 +176,67 @@ describe('NsjailSandbox', () => {
     const result = await promise;
     expect(result.exitCode).toBe(-1);
   });
+
+  describe('mount path sanitization', () => {
+    it('should skip empty mount path', () => {
+      const fakeProc = createFakeProcess();
+      (child_process.spawn as jest.Mock).mockReturnValue(fakeProc);
+
+      sandbox.execute(
+        makeRequest({
+          compiled: {
+            cmd: '/usr/bin/python3',
+            args: [],
+            language: 'python',
+            readonlyMounts: ['', '/opt/python3'],
+          },
+        }),
+      );
+      fakeProc.emit('close', 0);
+
+      const args = (child_process.spawn as jest.Mock).mock.calls[0][1] as string[];
+      expect(args).toContain('/opt/python3:/opt/python3:ro');
+      expect(args).not.toContain('::ro');
+    });
+
+    it('should skip relative mount paths', () => {
+      const fakeProc = createFakeProcess();
+      (child_process.spawn as jest.Mock).mockReturnValue(fakeProc);
+
+      sandbox.execute(
+        makeRequest({
+          compiled: {
+            cmd: '/usr/bin/python3',
+            args: [],
+            language: 'python',
+            readonlyMounts: ['../etc/passwd'],
+          },
+        }),
+      );
+      fakeProc.emit('close', 0);
+
+      const args = (child_process.spawn as jest.Mock).mock.calls[0][1] as string[];
+      expect(args.some((a: string) => a.includes('passwd'))).toBe(false);
+    });
+
+    it('should skip mount paths containing colons', () => {
+      const fakeProc = createFakeProcess();
+      (child_process.spawn as jest.Mock).mockReturnValue(fakeProc);
+
+      sandbox.execute(
+        makeRequest({
+          compiled: {
+            cmd: '/usr/bin/python3',
+            args: [],
+            language: 'python',
+            readonlyMounts: ['/opt/lib:evil'],
+          },
+        }),
+      );
+      fakeProc.emit('close', 0);
+
+      const args = (child_process.spawn as jest.Mock).mock.calls[0][1] as string[];
+      expect(args.some((a: string) => a.includes('evil'))).toBe(false);
+    });
+  });
 });
