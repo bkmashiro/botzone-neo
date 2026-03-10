@@ -142,7 +142,7 @@ export class RunOJUseCase {
         try {
           checkResult = await checker.check(tc.input, tc.expectedOutput, sandboxResult.stdout);
         } catch (checkerErr) {
-          this.logger.error(`Checker 执行异常: ${checkerErr}`);
+          this.logger.error(`Checker 执行异常 (testcase=${tc.id}): ${checkerErr}`);
           testcaseResults.push({
             id: tc.id,
             verdict: Verdict.SE,

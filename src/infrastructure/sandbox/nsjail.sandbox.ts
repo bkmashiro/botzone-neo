@@ -59,7 +59,8 @@ export class NsjailSandbox implements ISandbox {
         clearTimeout(timer);
         const stdout = Buffer.concat(stdoutChunks).toString();
         const stderr = Buffer.concat(stderrChunks).toString();
-        resolve({ stdout, stderr, exitCode: code ?? -1, timedOut });
+        const outputTruncated = stdoutBytes >= MAX_OUTPUT_BYTES || stderrBytes >= MAX_OUTPUT_BYTES;
+        resolve({ stdout, stderr, exitCode: code ?? -1, timedOut, outputTruncated });
       });
 
       child.on('error', (err) => {
@@ -112,7 +113,7 @@ export class NsjailSandbox implements ISandbox {
       '--cwd',
       '/workspace',
 
-      // 网络隔离
+      // 禁用网络命名空间（Bot 可能需要网络访问）
       '--disable_clone_newnet',
 
       // 用户映射

@@ -53,7 +53,7 @@ describe('DirectSandbox', () => {
     expect(result.timedOut).toBe(true);
   });
 
-  it('truncates stdout exceeding MAX_OUTPUT_BYTES', async () => {
+  it('truncates stdout exceeding MAX_OUTPUT_BYTES and sets outputTruncated', async () => {
     // Generate output slightly over the limit
     const overSize = MAX_OUTPUT_BYTES + 1024;
     const req: SandboxRequest = {
@@ -70,6 +70,18 @@ describe('DirectSandbox', () => {
     const result = await sandbox.execute(req);
     expect(result.stdout.length).toBeLessThanOrEqual(MAX_OUTPUT_BYTES + 65536); // buffer margin
     expect(result.exitCode).toBe(0);
+    expect(result.outputTruncated).toBe(true);
+  });
+
+  it('should not set outputTruncated for normal output', async () => {
+    const req: SandboxRequest = {
+      compiled: { cmd: 'echo', args: ['small output'], language: 'test', readonlyMounts: [] },
+      workDir: '/tmp',
+      limit: { timeMs: 5000, memoryMb: 256 },
+    };
+
+    const result = await sandbox.execute(req);
+    expect(result.outputTruncated).toBe(false);
   });
 
   it('should reject when spawn fails (e.g. command not found)', async () => {

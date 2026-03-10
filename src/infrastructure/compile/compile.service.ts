@@ -173,6 +173,7 @@ export class CompileService {
 
       child.on('close', (code) => {
         clearTimeout(timer);
+        if (stderr.length >= maxOutput) stderr += '\n... (output truncated)';
         resolve({ stdout, stderr, exitCode: code ?? -1 });
       });
 

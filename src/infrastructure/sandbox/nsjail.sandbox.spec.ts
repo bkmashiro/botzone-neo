@@ -68,6 +68,7 @@ describe('NsjailSandbox', () => {
       stderr: 'err',
       exitCode: 0,
       timedOut: false,
+      outputTruncated: false,
     });
 
     // Verify spawn was called with nsjail path

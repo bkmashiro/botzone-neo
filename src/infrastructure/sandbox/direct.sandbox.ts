@@ -53,7 +53,8 @@ export class DirectSandbox implements ISandbox {
         clearTimeout(timer);
         const stdout = Buffer.concat(stdoutChunks).toString();
         const stderr = Buffer.concat(stderrChunks).toString();
-        resolve({ stdout, stderr, exitCode: code ?? -1, timedOut });
+        const outputTruncated = stdoutBytes >= MAX_OUTPUT_BYTES || stderrBytes >= MAX_OUTPUT_BYTES;
+        resolve({ stdout, stderr, exitCode: code ?? -1, timedOut, outputTruncated });
       });
 
       child.on('error', (err) => {

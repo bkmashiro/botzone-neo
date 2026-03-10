@@ -19,6 +19,8 @@ export interface SandboxResult {
   timedOut: boolean;
   /** 峰值内存使用（KB），沙箱可选提供 */
   memoryKb?: number;
+  /** stdout 或 stderr 是否因超出大小限制被截断 */
+  outputTruncated?: boolean;
 }
 
 /** 沙箱执行请求 */
