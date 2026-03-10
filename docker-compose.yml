@@ -11,13 +11,9 @@ services:
       - .env
     environment:
       - PORT=3001
-      - DB_HOST=mariadb
-      - DB_PORT=3306
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
-      mariadb:
-        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -38,31 +34,6 @@ services:
         reservations:
           cpus: "1"
           memory: 512M
-
-  mariadb:
-    image: mariadb:10.11
-    container_name: botzone-mariadb
-    restart: unless-stopped
-    environment:
-      - MARIADB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-rootpass}
-      - MARIADB_DATABASE=${DB_DATABASE:-botzone}
-      - MARIADB_USER=${DB_USERNAME:-botzone}
-      - MARIADB_PASSWORD=${DB_PASSWORD:-botzonepass}
-    volumes:
-      - mariadb-data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    networks:
-      - botzone-internal
-    deploy:
-      resources:
-        limits:
-          cpus: "2"
-          memory: 1G
 
   redis:
     image: redis:7-alpine
@@ -85,8 +56,6 @@ services:
           memory: 512M
 
 volumes:
-  mariadb-data:
-    name: botzone-mariadb-data
   redis-data:
     name: botzone-redis-data
 

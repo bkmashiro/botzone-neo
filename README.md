@@ -258,11 +258,6 @@ docker/                      # Docker 相关配置
 |------|--------|------|
 | `PORT` | `3001` | 服务监听端口 |
 | `NODE_ENV` | `development` | 运行环境 |
-| `DB_HOST` | `mariadb` | MariaDB 主机 |
-| `DB_PORT` | `3306` | MariaDB 端口 |
-| `DB_DATABASE` | `botzone` | 数据库名 |
-| `DB_USERNAME` | `botzone` | 数据库用户 |
-| `DB_PASSWORD` | `botzonepass` | 数据库密码 |
 | `REDIS_HOST` | `redis` | Redis 主机 |
 | `REDIS_PORT` | `6379` | Redis 端口 |
 | `JUDGE_CAPABILITY` | `15` | 最大并发对局数 |

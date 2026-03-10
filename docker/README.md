@@ -37,13 +37,12 @@ make docker-up
 | 服务 | 端口 | 说明 |
 |------|------|------|
 | judger | 3001 | NestJS 评测服务 |
-| mariadb | 3306 (dev only) | 数据库 |
 | redis | 6379 (dev only) | 队列/缓存 |
 
 ## 安全注意事项
 
 - judger 以 `privileged` 模式运行（nsjail 需要 namespace 权限）
-- 生产环境网络设为 `internal: true`，不暴露数据库/Redis 端口
+- 生产环境网络设为 `internal: true`，不暴露 Redis 端口
 - nsjail 将 Bot 进程降权到 `nobody` (uid 65534)
 - 通过 `TRUST_IP` 限制允许提交任务的来源 IP
 

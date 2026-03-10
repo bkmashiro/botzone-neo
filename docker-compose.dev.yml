@@ -12,10 +12,6 @@ services:
     environment:
       - NODE_ENV=development
 
-  mariadb:
-    ports:
-      - "${DB_PORT:-3306}:3306"
-
   redis:
     ports:
       - "${REDIS_PORT:-6379}:6379"
