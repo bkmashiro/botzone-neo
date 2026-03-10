@@ -31,10 +31,16 @@ export interface BotSpec {
   id: string;
   /** 编程语言 */
   language: string;
-  /** 源代码 */
+  /** 源代码（type=code 时必填） */
   source: string;
   /** 资源限制 */
   limit: ResourceLimit;
+  /** Bot 类型：code（沙箱运行）| webhook（HTTP 调用外部服务） */
+  runnerType?: 'code' | 'webhook';
+  /** Webhook URL（runnerType=webhook 时必填） */
+  externalUrl?: string;
+  /** Webhook 超时（ms），默认 10000，最大 30000 */
+  webhookTimeoutMs?: number;
 }
 
 /** 编译产物：描述如何运行一个已编译的程序 */
@@ -53,12 +59,18 @@ export interface CompiledBot {
 export interface BotRuntime {
   /** Bot 标识 */
   id: string;
-  /** 编译产物 */
+  /** 编译产物（type=code 时填充，webhook 时为占位值） */
   compiled: CompiledBot;
   /** 工作目录 */
   workDir: string;
   /** 资源限制 */
   limit: ResourceLimit;
+  /** Bot 类型（默认 code） */
+  runnerType?: 'code' | 'webhook';
+  /** Webhook URL */
+  externalUrl?: string;
+  /** Webhook 超时 ms */
+  webhookTimeoutMs?: number;
 }
 
 /** Bot 输入（发送给 Bot 进程的完整数据，官方协议 snake_case） */

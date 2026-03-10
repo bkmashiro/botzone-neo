@@ -17,13 +17,20 @@ import { Logger } from '@nestjs/common';
 import { BotRuntime, BotInput, BotOutput } from '../../domain/bot';
 import { ISandbox } from '../../infrastructure/sandbox/sandbox.interface';
 import { IBotRunStrategy } from '../bot-run-strategy.interface';
+import { WebhookRunner } from './webhook-runner';
 
 export class RestartStrategy implements IBotRunStrategy {
   private readonly logger = new Logger(RestartStrategy.name);
+  private readonly webhookRunner = new WebhookRunner();
 
   constructor(private readonly sandbox: ISandbox) {}
 
   async runRound(bot: BotRuntime, input: BotInput): Promise<BotOutput> {
+    // Webhook bot: delegate to HTTP runner instead of sandbox
+    if (bot.runnerType === 'webhook' && bot.externalUrl) {
+      return this.webhookRunner.run(bot.id, bot.externalUrl, input, bot.webhookTimeoutMs);
+    }
+
     const inputJson = JSON.stringify(input);
 
     const result = await this.sandbox.execute({

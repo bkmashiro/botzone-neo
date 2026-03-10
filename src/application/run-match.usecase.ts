@@ -300,6 +300,22 @@ export class RunMatchUseCase {
     workDir: string,
     bots: Map<string, BotRuntime>,
   ): Promise<CompileSummary> {
+    // Webhook bots skip compilation — no code to run
+    if (spec.runnerType === 'webhook') {
+      const botWorkDir = path.join(workDir, spec.id);
+      await fs.mkdir(botWorkDir, { recursive: true });
+      bots.set(spec.id, {
+        id: spec.id,
+        compiled: { cmd: '', args: [], language: 'webhook', readonlyMounts: [] },
+        workDir: botWorkDir,
+        limit: spec.limit,
+        runnerType: 'webhook',
+        externalUrl: spec.externalUrl,
+        webhookTimeoutMs: spec.webhookTimeoutMs,
+      });
+      return { botId: spec.id, verdict: Verdict.OK };
+    }
+
     try {
       const compiled = await this.compileService.compile(spec.language, spec.source);
       const botWorkDir = path.join(workDir, spec.id);
@@ -310,6 +326,7 @@ export class RunMatchUseCase {
         compiled,
         workDir: botWorkDir,
         limit: spec.limit,
+        runnerType: 'code',
       });
 
       return { botId: spec.id, verdict: Verdict.OK };
