@@ -1,5 +1,8 @@
 import { ILanguage } from './language.interface';
 
+/**
+ * C++ 语言配置
+ */
 export class CppLanguage implements ILanguage {
   readonly name = 'cpp';
   readonly extension = '.cpp';
@@ -9,10 +12,12 @@ export class CppLanguage implements ILanguage {
     return {
       cmd: 'g++',
       args: [
-        '-O2', '-std=c++17', '-DONLINE_JUDGE',
+        '-O2',
+        '-std=c++17',
+        '-DONLINE_JUDGE',
         '-o', outputPath,
         sourcePath,
-        '-I/usr/local/include',
+        '-I/usr/local/include',  // nlohmann/json 头文件路径
       ],
     };
   }

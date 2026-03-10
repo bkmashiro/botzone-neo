@@ -1,16 +1,22 @@
 import * as path from 'path';
 import { ILanguage } from './language.interface';
 
+/**
+ * TypeScript (Node.js) 语言配置
+ */
 export class TypeScriptLanguage implements ILanguage {
   readonly name = 'typescript';
   readonly extension = '.ts';
   readonly needsCompilation = true;
 
   getCompileCommand(sourcePath: string, outputPath: string) {
+    // tsc 输出到 outputPath 目录，编译后文件为 outputPath/main.js
     return {
       cmd: 'tsc',
       args: [
-        '--strict', '--target', 'ES2021', '--module', 'commonjs',
+        '--strict',
+        '--target', 'ES2021',
+        '--module', 'commonjs',
         '--outDir', outputPath,
         sourcePath,
       ],
@@ -18,6 +24,7 @@ export class TypeScriptLanguage implements ILanguage {
   }
 
   getRunCommand(_sourcePath: string, outputPath: string) {
+    // tsc --outDir 产出 main.js 在 outputPath 目录下
     return { cmd: 'node', args: [path.join(outputPath, 'main.js')] };
   }
 
