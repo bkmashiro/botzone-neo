@@ -14,6 +14,9 @@ import { Logger } from '@nestjs/common';
 import { BotRuntime, BotInput, BotOutput } from '../../domain/bot';
 import { IBotRunStrategy } from '../bot-run-strategy.interface';
 
+/** 单轮 stdout 缓冲区上限（1MB），防止内存溢出 */
+const MAX_BUFFER_SIZE = 1024 * 1024;
+
 export class LongrunStrategy implements IBotRunStrategy {
   private readonly logger = new Logger(LongrunStrategy.name);
   private child: ChildProcess | null = null;
@@ -35,10 +38,17 @@ export class LongrunStrategy implements IBotRunStrategy {
         resolve({ response: '', debug: `TLE: 超过时间限制 ${bot.limit.timeMs}ms` });
       }, bot.limit.timeMs);
 
-      // 收集一行 stdout 输出
+      // 收集一行 stdout 输出（限制缓冲区大小）
       let buffer = '';
       const onData = (chunk: Buffer) => {
         buffer += chunk.toString();
+        if (buffer.length > MAX_BUFFER_SIZE) {
+          clearTimeout(timeoutHandle);
+          this.child?.stdout?.off('data', onData);
+          this.logger.warn(`Bot ${bot.id} 输出超过 ${MAX_BUFFER_SIZE} 字节限制`);
+          resolve({ response: '', debug: 'OLE: 输出超过大小限制' });
+          return;
+        }
         const newlineIdx = buffer.indexOf('\n');
         if (newlineIdx !== -1) {
           clearTimeout(timeoutHandle);

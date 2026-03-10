@@ -212,6 +212,20 @@ export class JudgeController {
       throw new BadRequestException('缺少 callback.finish');
     }
     this.validateUrl(String(callback['finish']), 'callback.finish');
+
+    // checker 模式要求同时提供 checkerSource 和 checkerLanguage
+    const judgeMode = body['judgeMode'];
+    if (judgeMode === 'checker') {
+      if (!body['checkerSource'] || typeof body['checkerSource'] !== 'string') {
+        throw new BadRequestException('checker 模式要求提供 checkerSource');
+      }
+      if (!body['checkerLanguage'] || typeof body['checkerLanguage'] !== 'string') {
+        throw new BadRequestException('checker 模式要求提供 checkerLanguage');
+      }
+      if ((body['checkerSource'] as string).length > MAX_SOURCE_LENGTH) {
+        throw new BadRequestException('checkerSource 超过 64KB 限制');
+      }
+    }
   }
 
   /** 验证 URL 格式（仅允许 http/https，拒绝内网地址） */
@@ -233,19 +247,60 @@ export class JudgeController {
   /** 检测是否为内网/回环地址（防止 SSRF） */
   private isPrivateHost(hostname: string): boolean {
     if (hostname === 'localhost' || hostname === '[::1]') return true;
+
+    // IPv6 检测（去除方括号）
+    const ipv6 = hostname.startsWith('[') ? hostname.slice(1, -1) : hostname;
+    if (ipv6.includes(':')) {
+      return this.isPrivateIPv6(ipv6);
+    }
+
     // IPv4 private ranges
     const ipv4Match = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
     if (ipv4Match) {
       const [, a, b, c, d] = ipv4Match.map(Number);
-      // Reject invalid octets (> 255)
-      if (a > 255 || b > 255 || c > 255 || d > 255) return true;
-      if (a === 127) return true; // 127.0.0.0/8
-      if (a === 10) return true; // 10.0.0.0/8
-      if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
-      if (a === 192 && b === 168) return true; // 192.168.0.0/16
-      if (a === 169 && b === 254) return true; // 169.254.0.0/16 link-local
-      if (a === 0) return true; // 0.0.0.0/8
+      return this.isPrivateIPv4(a, b, c, d);
     }
+    return false;
+  }
+
+  /** 检测 IPv6 是否为私有/保留地址 */
+  private isPrivateIPv6(addr: string): boolean {
+    const normalized = addr.toLowerCase();
+    // ::1 loopback
+    if (normalized === '::1') return true;
+    // :: unspecified
+    if (normalized === '::') return true;
+    // fe80::/10 link-local
+    if (normalized.startsWith('fe80:') || normalized.startsWith('fe80')) return true;
+    // fc00::/7 unique local (fc00::/8 + fd00::/8)
+    if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
+    // ff00::/8 multicast
+    if (normalized.startsWith('ff')) return true;
+    // ::ffff:0:0/96 IPv4-mapped — dotted form (e.g. ::ffff:192.168.1.1)
+    const v4MappedMatch = normalized.match(/^::ffff:(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+    if (v4MappedMatch) {
+      const [, a, b, c, d] = v4MappedMatch.map(Number);
+      return this.isPrivateIPv4(a, b, c, d);
+    }
+    // ::ffff:0:0/96 IPv4-mapped — hex form (e.g. ::ffff:c0a8:101, normalized by Node URL)
+    const v4HexMatch = normalized.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (v4HexMatch) {
+      const hi = parseInt(v4HexMatch[1], 16);
+      const lo = parseInt(v4HexMatch[2], 16);
+      return this.isPrivateIPv4((hi >> 8) & 0xff, hi & 0xff, (lo >> 8) & 0xff, lo & 0xff);
+    }
+    return false;
+  }
+
+  /** 检测 IPv4 四元组是否为私有地址 */
+  private isPrivateIPv4(a: number, b: number, c: number, d: number): boolean {
+    if (a > 255 || b > 255 || c > 255 || d > 255) return true;
+    if (a === 127) return true;
+    if (a === 10) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 0) return true;
     return false;
   }
 

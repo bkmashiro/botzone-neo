@@ -472,6 +472,93 @@ describe('Judge API E2E', () => {
     expect(mockEnqueue).not.toHaveBeenCalled();
   });
 
+  // ── IPv6 SSRF 防护 ──
+
+  it('POST /v1/judge botzone callback 使用 IPv6 loopback [::1] → 400', async () => {
+    await request(app.getHttpServer())
+      .post('/v1/judge')
+      .send({
+        type: 'botzone',
+        game: {
+          judger: { language: 'cpp', source: '// ok', limit: { time: 1000, memory: 256 } },
+        },
+        callback: { update: 'http://[::1]/u', finish: 'http://[::1]/f' },
+      })
+      .expect(400);
+
+    expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
+  it('POST /v1/judge botzone callback 使用 IPv6 link-local → 400', async () => {
+    await request(app.getHttpServer())
+      .post('/v1/judge')
+      .send({
+        type: 'botzone',
+        game: {
+          judger: { language: 'cpp', source: '// ok', limit: { time: 1000, memory: 256 } },
+        },
+        callback: { update: 'http://[fe80::1]/u', finish: 'http://[fe80::1]/f' },
+      })
+      .expect(400);
+
+    expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
+  it('POST /v1/judge botzone callback 使用 IPv6 unique local (fd) → 400', async () => {
+    await request(app.getHttpServer())
+      .post('/v1/judge')
+      .send({
+        type: 'botzone',
+        game: {
+          judger: { language: 'cpp', source: '// ok', limit: { time: 1000, memory: 256 } },
+        },
+        callback: { update: 'http://[fd00::1]/u', finish: 'http://[fd00::1]/f' },
+      })
+      .expect(400);
+
+    expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
+  // ── OJ checker 验证 ──
+
+  it('POST /v1/judge OJ checker 模式缺少 checkerSource → 400', async () => {
+    await request(app.getHttpServer())
+      .post('/v1/judge')
+      .send({
+        type: 'oj',
+        language: 'cpp',
+        source: '// code',
+        testcases: [{ id: 1, input: '1', expectedOutput: '1' }],
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        callback: { finish: 'http://test/f' },
+        judgeMode: 'checker',
+        checkerLanguage: 'cpp',
+      })
+      .expect(400);
+
+    expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
+  it('POST /v1/judge OJ checker 模式缺少 checkerLanguage → 400', async () => {
+    await request(app.getHttpServer())
+      .post('/v1/judge')
+      .send({
+        type: 'oj',
+        language: 'cpp',
+        source: '// code',
+        testcases: [{ id: 1, input: '1', expectedOutput: '1' }],
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        callback: { finish: 'http://test/f' },
+        judgeMode: 'checker',
+        checkerSource: '#include "testlib.h"\nint main() { return 0; }',
+      })
+      .expect(400);
+
+    expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
   // ── Botzone runMode ──
 
   it('POST /v1/judge botzone longrun 模式 → 202', async () => {
