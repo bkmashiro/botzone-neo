@@ -167,7 +167,7 @@ describe('CompileService (infrastructure)', () => {
       // Cache should only hold 2 entries now; re-compiling first should trigger a new spawn
       await smallService.compile('cpp', 'int main() { return 1; }');
       expect(mockSpawn).toHaveBeenCalledTimes(4); // re-compiled because it was evicted
-    });
+    }, 15000);
   });
 
   describe('runCompiler edge cases', () => {

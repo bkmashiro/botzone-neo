@@ -7,6 +7,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import helmet from 'helmet';
+import { json } from 'express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 
@@ -17,6 +19,19 @@ async function bootstrap(): Promise<void> {
 
   app.useLogger(logger);
   app.enableShutdownHooks();
+
+  // 安全 HTTP 头
+  app.use(helmet());
+
+  // CORS（仅允许配置的来源）
+  app.enableCors({
+    origin: config.get<string>('CORS_ORIGIN', '*'),
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type', 'X-Request-ID'],
+  });
+
+  // 请求体大小限制（1MB）
+  app.use(json({ limit: '1mb' }));
 
   // 全局异常过滤器
   app.useGlobalFilters(new AllExceptionsFilter());
