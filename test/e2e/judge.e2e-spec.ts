@@ -272,6 +272,44 @@ describe('Judge E2E 测试', () => {
       .expect(400);
   });
 
+  it('应该拒绝非信任 IP 的请求', async () => {
+    // Override module with restricted trust IPs
+    const restrictedModule: TestingModule = await Test.createTestingModule({
+      controllers: [JudgeController],
+      providers: [
+        {
+          provide: JudgeService,
+          useValue: {
+            enqueue: jest.fn().mockResolvedValue('job-1'),
+            getTrustIps: jest.fn().mockReturnValue(['10.0.0.1']),
+          },
+        },
+      ],
+    }).compile();
+
+    const restrictedApp = restrictedModule.createNestApplication();
+    restrictedApp.useGlobalPipes(new ValidationPipe({
+      whitelist: true,
+      transform: true,
+    }));
+    await restrictedApp.init();
+
+    const body = {
+      game: {
+        judger: { language: 'cpp', source: '// j', limit: { time: 3000, memory: 256 } },
+        '0': { language: 'cpp', source: '// b', limit: { time: 1000, memory: 128 } },
+      },
+      callback: { update: 'http://cb/u', finish: 'http://cb/f' },
+    };
+
+    await request(restrictedApp.getHttpServer())
+      .post('/v1/judge')
+      .send(body)
+      .expect(403);
+
+    await restrictedApp.close();
+  });
+
   it('应该支持 initdata 参数', async () => {
     compileService.compile.mockResolvedValue({
       verdict: 'OK',
@@ -318,5 +356,35 @@ describe('Judge E2E 测试', () => {
       .expect(202);
 
     expect(callbackService.finish).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * HealthController E2E
+ */
+import { HealthController } from '../../src/interface/health.controller';
+
+describe('Health E2E', () => {
+  let app: INestApplication;
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      controllers: [HealthController],
+    }).compile();
+
+    app = module.createNestApplication();
+    await app.init();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('GET /health should return 200 with status ok', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/health')
+      .expect(200);
+
+    expect(res.body).toEqual({ status: 'ok' });
   });
 });
