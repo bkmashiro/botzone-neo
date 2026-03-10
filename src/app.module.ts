@@ -1,9 +1,11 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bull';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import { JudgeModule } from './interface/judge.module';
+import { RequestIdMiddleware } from './interface/request-id.middleware';
 
 /**
  * 应用根模块
@@ -35,6 +37,9 @@ import { JudgeModule } from './interface/judge.module';
       }),
     }),
 
+    // 限流：每分钟最多 60 次请求
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
+
     // Prometheus /metrics 端点
     PrometheusModule.register(),
 
@@ -42,4 +47,8 @@ import { JudgeModule } from './interface/judge.module';
     JudgeModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestIdMiddleware).forRoutes('*');
+  }
+}

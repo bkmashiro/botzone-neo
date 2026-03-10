@@ -266,10 +266,13 @@ docker/                      # Docker 相关配置
 | `REDIS_HOST` | `redis` | Redis 主机 |
 | `REDIS_PORT` | `6379` | Redis 端口 |
 | `JUDGE_CAPABILITY` | `15` | 最大并发对局数 |
+| `JUDGE_CONCURRENCY` | `15` | Bull 队列并发数 |
 | `COMPILE_TIME_LIMIT_MS` | `10000` | 编译超时（毫秒） |
 | `COMPILE_MEMORY_LIMIT_MB` | `512` | 编译内存限制（MB） |
+| `MAX_MATCH_DURATION_MS` | `300000` | 单场对局最大时长（毫秒） |
 | `SANDBOX_BACKEND` | `nsjail` | 沙箱后端：`nsjail`（生产）/ `direct`（开发） |
 | `TRUST_IP` | `127.0.0.1` | 允许提交评测任务的 IP（逗号分隔） |
+| `CORS_ORIGIN` | `*` | CORS 允许的来源（`*` 或具体域名） |
 
 ## 评测结果（Verdict）
 
