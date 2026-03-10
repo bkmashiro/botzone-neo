@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -30,7 +30,7 @@ export interface SessionScope {
  * - globaldata：文件存储，跨对局持久化，7 天 TTL 自动清理
  */
 @Injectable()
-export class DataStoreService implements OnModuleInit {
+export class DataStoreService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DataStoreService.name);
   private readonly baseDir: string;
   private cleanupTimer: ReturnType<typeof setInterval> | undefined;

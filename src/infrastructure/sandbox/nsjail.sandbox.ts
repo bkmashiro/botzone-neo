@@ -27,22 +27,22 @@ export class NsjailSandbox implements ISandbox {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
-      let stdout = '';
-      let stderr = '';
+      const stdoutChunks: Buffer[] = [];
+      const stderrChunks: Buffer[] = [];
       let timedOut = false;
       let stdoutBytes = 0;
       let stderrBytes = 0;
 
       child.stdout?.on('data', (data: Buffer) => {
         if (stdoutBytes < MAX_OUTPUT_BYTES) {
-          stdout += data.toString();
+          stdoutChunks.push(data);
           stdoutBytes += data.length;
         }
       });
 
       child.stderr?.on('data', (data: Buffer) => {
         if (stderrBytes < MAX_OUTPUT_BYTES) {
-          stderr += data.toString();
+          stderrChunks.push(data);
           stderrBytes += data.length;
         }
       });
@@ -57,6 +57,8 @@ export class NsjailSandbox implements ISandbox {
 
       child.on('close', (code) => {
         clearTimeout(timer);
+        const stdout = Buffer.concat(stdoutChunks).toString();
+        const stderr = Buffer.concat(stderrChunks).toString();
         resolve({ stdout, stderr, exitCode: code ?? -1, timedOut });
       });
 
