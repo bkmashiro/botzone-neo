@@ -107,7 +107,9 @@ export class DataStoreService implements OnModuleInit, OnModuleDestroy {
       const filePath = this.safePath(botId);
       const stat = await fs.stat(filePath);
       if (Date.now() - stat.mtimeMs > GLOBALDATA_TTL_MS) {
-        await fs.unlink(filePath).catch(() => {});
+        await fs.unlink(filePath).catch((unlinkErr) => {
+          this.logger.debug(`过期全局数据清理失败 (${botId}): ${unlinkErr}`);
+        });
         this.logger.debug(`全局数据已过期并清理: ${botId}`);
         return '';
       }

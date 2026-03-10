@@ -114,7 +114,10 @@ export class JudgeQueueService implements OnModuleInit, OnApplicationShutdown {
       this.logger.log(`评测任务完成: jobId=${job.id}`);
       return result;
     } catch (err) {
-      this.logger.error(`评测任务失败: jobId=${job.id}, error=${err}`);
+      this.logger.error(
+        `评测任务失败: jobId=${job.id}, error=${err instanceof Error ? err.message : String(err)}`,
+        err instanceof Error ? err.stack : undefined,
+      );
       throw err;
     }
   }

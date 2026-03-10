@@ -56,17 +56,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message = 'Internal server error';
       error = 'INTERNAL_SERVER_ERROR';
       this.logger.error(
-        `未捕获异常: ${exception instanceof Error ? exception.stack : String(exception)}`,
+        `未捕获异常 ${request.method} ${request.url}: ${exception instanceof Error ? exception.stack : String(exception)}`,
       );
     }
 
+    const requestId = request.headers['x-request-id'];
     const body: ErrorResponse = {
       statusCode,
       error,
       message,
       timestamp: new Date().toISOString(),
       path: request.url,
-      requestId: request.headers['x-request-id'] as string,
+      ...(typeof requestId === 'string' ? { requestId } : {}),
     };
 
     response.status(statusCode).json(body);
