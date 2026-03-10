@@ -1,4 +1,4 @@
-import { Match, MatchTask, MAX_ROUNDS } from './match';
+import { Match, MatchTask, MatchState, MAX_ROUNDS } from './match';
 import { Verdict } from './verdict';
 
 const makeTask = (): MatchTask => ({
@@ -57,5 +57,32 @@ describe('Match', () => {
 
   it('MAX_ROUNDS should be 1000', () => {
     expect(MAX_ROUNDS).toBe(1000);
+  });
+
+  it('状态机：Pending → Running → Finished', () => {
+    const match = new Match(makeTask());
+    expect(match.state).toBe(MatchState.PENDING);
+
+    match.nextRound();
+    expect(match.state).toBe(MatchState.RUNNING);
+
+    match.finish({ '0': 1 }, []);
+    expect(match.state).toBe(MatchState.FINISHED);
+  });
+
+  it('已结束的对局不能推进轮次', () => {
+    const match = new Match(makeTask());
+    match.nextRound();
+    match.finish({ '0': 0 }, []);
+
+    expect(() => match.nextRound()).toThrow('对局已结束');
+  });
+
+  it('不能重复结束对局', () => {
+    const match = new Match(makeTask());
+    match.nextRound();
+    match.finish({ '0': 0 }, []);
+
+    expect(() => match.finish({ '0': 0 }, [])).toThrow('对局已结束');
   });
 });

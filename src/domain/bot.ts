@@ -5,6 +5,18 @@
  * 表示一局对局中的一个参与者（玩家或裁判）。
  */
 
+/** Bot 编译状态 */
+export enum CompileStatus {
+  /** 尚未开始编译 */
+  PENDING = 'pending',
+  /** 正在编译 */
+  COMPILING = 'compiling',
+  /** 编译成功 */
+  SUCCESS = 'success',
+  /** 编译失败 */
+  FAILED = 'failed',
+}
+
 /** 资源限制 */
 export interface ResourceLimit {
   /** 时间限制（毫秒） */

@@ -42,6 +42,16 @@ export interface CompileSummary {
   message?: string;
 }
 
+/** Match 状态机 */
+export enum MatchState {
+  /** 等待开始 */
+  PENDING = 'pending',
+  /** 对局进行中 */
+  RUNNING = 'running',
+  /** 对局已结束 */
+  FINISHED = 'finished',
+}
+
 /** 对局最终结果 */
 export interface MatchResult {
   /** 各参与者分数 */
@@ -60,11 +70,13 @@ export const MAX_ROUNDS = 1000;
  *
  * 负责对局的轮次推进、日志收集和结果生成。
  * 不涉及 I/O，纯状态管理。
+ *
+ * 状态机：Pending → Running → Finished
  */
 export class Match {
   private round = 0;
   private readonly log: unknown[] = [];
-  private _finished = false;
+  private _state: MatchState = MatchState.PENDING;
 
   constructor(
     readonly task: MatchTask,
@@ -75,8 +87,12 @@ export class Match {
     return this.round;
   }
 
+  get state(): MatchState {
+    return this._state;
+  }
+
   get isFinished(): boolean {
-    return this._finished;
+    return this._state === MatchState.FINISHED;
   }
 
   get hasRoundsLeft(): boolean {
@@ -85,9 +101,13 @@ export class Match {
 
   /** 推进到下一轮，返回新的轮次编号 */
   nextRound(): number {
+    if (this._state === MatchState.FINISHED) {
+      throw new Error('对局已结束，不能继续推进轮次');
+    }
     if (!this.hasRoundsLeft) {
       throw new Error('超过最大轮次限制');
     }
+    this._state = MatchState.RUNNING;
     return ++this.round;
   }
 
@@ -101,7 +121,10 @@ export class Match {
     scores: Record<string, number>,
     compiles: CompileSummary[],
   ): MatchResult {
-    this._finished = true;
+    if (this._state === MatchState.FINISHED) {
+      throw new Error('对局已结束，不能重复结束');
+    }
+    this._state = MatchState.FINISHED;
     return { scores, log: [...this.log], compiles };
   }
 }
