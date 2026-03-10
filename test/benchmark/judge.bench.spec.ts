@@ -7,7 +7,9 @@
  * - DiffChecker 大输出（1MB）比对
  */
 
+/* eslint-disable no-console */
 import { ConfigService } from '@nestjs/config';
+import { Counter } from 'prom-client';
 import { CompileService } from '../../src/infrastructure/compile/compile.service';
 import { RestartStrategy } from '../../src/strategies/botzone/restart.strategy';
 import { DiffChecker } from '../../src/strategies/oj/diff.checker';
@@ -41,7 +43,8 @@ describe('benchmark: CompileService cache', () => {
         return defaultVal;
       },
     } as ConfigService;
-    service = new CompileService(configService);
+    const mockCounter = { inc: (): void => {} } as unknown as Counter;
+    service = new CompileService(configService, mockCounter, mockCounter);
   });
 
   it('cache miss vs cache hit latency', async () => {
@@ -131,7 +134,9 @@ describe('benchmark: RestartStrategy round', () => {
     const p50 = times[Math.floor(times.length * 0.5)];
     const p99 = times[Math.floor(times.length * 0.99)];
 
-    console.log(`[RestartStrategy] avg: ${avg.toFixed(4)}ms, p50: ${p50.toFixed(4)}ms, p99: ${p99.toFixed(4)}ms (n=${times.length})`);
+    console.log(
+      `[RestartStrategy] avg: ${avg.toFixed(4)}ms, p50: ${p50.toFixed(4)}ms, p99: ${p99.toFixed(4)}ms (n=${times.length})`,
+    );
 
     // mock sandbox 下，单轮应该 < 1ms
     expect(avg).toBeLessThan(1);
@@ -162,8 +167,12 @@ describe('benchmark: RestartStrategy round', () => {
     const avgJson = jsonTimes.reduce((a, b) => a + b, 0) / jsonTimes.length;
     const avgSimple = simpleTimes.reduce((a, b) => a + b, 0) / simpleTimes.length;
 
-    console.log(`[RestartStrategy] JSON parse avg:       ${avgJson.toFixed(4)}ms (n=${jsonTimes.length})`);
-    console.log(`[RestartStrategy] Simplified parse avg: ${avgSimple.toFixed(4)}ms (n=${simpleTimes.length})`);
+    console.log(
+      `[RestartStrategy] JSON parse avg:       ${avgJson.toFixed(4)}ms (n=${jsonTimes.length})`,
+    );
+    console.log(
+      `[RestartStrategy] Simplified parse avg: ${avgSimple.toFixed(4)}ms (n=${simpleTimes.length})`,
+    );
 
     // 两种模式都应在微秒级
     expect(avgJson).toBeLessThan(0.1);
@@ -182,7 +191,9 @@ describe('benchmark: DiffChecker large output', () => {
     const output = repeat(line, 1024 * 1024);
     const lineCount = output.split('\n').length;
 
-    console.log(`[DiffChecker] output size: ${(Buffer.byteLength(output) / 1024).toFixed(0)}KB, lines: ${lineCount}`);
+    console.log(
+      `[DiffChecker] output size: ${(Buffer.byteLength(output) / 1024).toFixed(0)}KB, lines: ${lineCount}`,
+    );
 
     const times: number[] = [];
     for (let i = 0; i < 20; i++) {
@@ -192,7 +203,9 @@ describe('benchmark: DiffChecker large output', () => {
 
     const avg = times.reduce((a, b) => a + b, 0) / times.length;
     const max = Math.max(...times);
-    console.log(`[DiffChecker] 1MB identical: avg ${avg.toFixed(2)}ms, max ${max.toFixed(2)}ms (n=${times.length})`);
+    console.log(
+      `[DiffChecker] 1MB identical: avg ${avg.toFixed(2)}ms, max ${max.toFixed(2)}ms (n=${times.length})`,
+    );
 
     // 1MB diff 应该 < 100ms
     expect(avg).toBeLessThan(100);
@@ -231,7 +244,9 @@ describe('benchmark: DiffChecker large output', () => {
     }
 
     const avg = times.reduce((a, b) => a + b, 0) / times.length;
-    console.log(`[DiffChecker] 1MB line-count-mismatch: avg ${avg.toFixed(2)}ms (n=${times.length})`);
+    console.log(
+      `[DiffChecker] 1MB line-count-mismatch: avg ${avg.toFixed(2)}ms (n=${times.length})`,
+    );
 
     // 行数不匹配时应该提前退出，更快
     expect(avg).toBeLessThan(100);
