@@ -17,10 +17,13 @@ import {
   IsObject,
   IsArray,
   IsNumber,
+  IsUrl,
   MaxLength,
   Min,
   Max,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /** 单个 source 最大长度（64KB） */
@@ -73,16 +76,18 @@ class CodeDto {
   source!: string;
 
   @ApiProperty({ description: '资源限制', type: LimitDto })
+  @ValidateNested()
+  @Type(() => LimitDto)
   limit!: LimitDto;
 }
 
 class CallbackDto {
   @ApiProperty({ description: '每轮进度更新回调 URL', example: 'http://example.com/update' })
-  @IsString()
+  @IsUrl({ require_tld: false })
   update!: string;
 
   @ApiProperty({ description: '对局结束回调 URL', example: 'http://example.com/finish' })
-  @IsString()
+  @IsUrl({ require_tld: false })
   finish!: string;
 }
 
@@ -100,6 +105,8 @@ export class BotzoneTaskDto {
   game!: Record<string, CodeDto>;
 
   @ApiProperty({ description: '回调地址', type: CallbackDto })
+  @ValidateNested()
+  @Type(() => CallbackDto)
   callback!: CallbackDto;
 
   @ApiPropertyOptional({ description: '对局初始化数据' })
@@ -164,6 +171,8 @@ export class OJTaskDto {
 
   @ApiProperty({ description: '测试用例列表', type: [TestcaseDto] })
   @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TestcaseDto)
   testcases!: TestcaseDto[];
 
   @ApiProperty({
