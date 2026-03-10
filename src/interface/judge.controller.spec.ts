@@ -374,6 +374,7 @@ describe('JudgeController', () => {
       'http://[fe80::1]/callback',
       'http://[fd00::1]/callback',
       'http://[::ffff:192.168.1.1]/callback',
+      'http://[::ffff:c0a8:101]/callback',
     ])('should reject private IP callback URL: %s', async (url) => {
       const body = {
         type: 'oj',

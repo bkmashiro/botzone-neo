@@ -292,6 +292,26 @@ describe('LongrunStrategy', () => {
     });
   });
 
+  describe('buffer overflow', () => {
+    it('should return OLE when stdout exceeds MAX_BUFFER_SIZE', async () => {
+      const child = createMockChild();
+      mockSpawn.mockReturnValue(child);
+
+      // Send more than 1MB without a newline
+      (child.stdin as unknown as { write: jest.Mock }).write.mockImplementation(() => {
+        process.nextTick(() => {
+          const bigChunk = Buffer.alloc(1024 * 1024 + 1, 'A');
+          child.stdout!.emit('data', bigChunk);
+        });
+        return true;
+      });
+
+      const output = await strategy.runRound(mockBot, mockInput);
+      expect(output.response).toBe('');
+      expect(output.debug).toContain('OLE');
+    });
+  });
+
   describe('process error event', () => {
     it('should mark process as exited on error event', async () => {
       const child = createMockChild();
