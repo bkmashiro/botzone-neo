@@ -14,7 +14,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { CompiledBot } from '../../domain/bot';
-import { CompileError } from '../../domain/error';
+import { CompileError } from '../../domain/verdict';
 import { ILanguage } from './languages/language.interface';
 import { CppLanguage } from './languages/cpp.language';
 import { PythonLanguage } from './languages/python.language';

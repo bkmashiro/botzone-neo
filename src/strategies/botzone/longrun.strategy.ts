@@ -14,7 +14,12 @@ import { ISandbox } from '../../infrastructure/sandbox/sandbox.interface';
 import { IBotRunStrategy } from '../bot-run-strategy.interface';
 
 export class LongrunStrategy implements IBotRunStrategy {
-  constructor(private readonly _sandbox: ISandbox) {}
+  constructor(private readonly sandbox: ISandbox) {}
+
+  /** 获取沙箱实例（供子类或未来实现使用） */
+  protected getSandbox(): ISandbox {
+    return this.sandbox;
+  }
 
   async runRound(_bot: BotRuntime, _input: BotInput): Promise<BotOutput> {
     // TODO: 实现常驻进程的 SIGCONT + stdin/stdout 交互
