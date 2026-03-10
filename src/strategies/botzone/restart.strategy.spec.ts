@@ -31,9 +31,7 @@ describe('RestartStrategy', () => {
   });
 
   it('解析 data/globaldata 字段', async () => {
-    const bot = makeBot('sh', ['-c',
-      'echo \'{"response":"r","data":"d1","globaldata":"g1"}\'',
-    ]);
+    const bot = makeBot('sh', ['-c', 'echo \'{"response":"r","data":"d1","globaldata":"g1"}\'']);
     const output = await strategy.runRound(bot, emptyInput);
 
     expect(output.response).toBe('r');
@@ -69,10 +67,7 @@ describe('RestartStrategy', () => {
 
   it('将 stdin（BotInput JSON）传给进程', async () => {
     // 用 sh 脚本：读取 stdin，提取 time_limit 字段作为 response
-    const bot = makeBot('sh', [
-      '-c',
-      `read line; echo "{\\"response\\":\\"got-stdin\\"}"`,
-    ]);
+    const bot = makeBot('sh', ['-c', `read line; echo "{\\"response\\":\\"got-stdin\\"}"`]);
     const output = await strategy.runRound(bot, emptyInput);
 
     // 验证进程成功接收到 stdin 并产生了输出
@@ -109,6 +104,32 @@ describe('RestartStrategy', () => {
       const output = strategy.parseOutput('{"response":"hi","debug":"d"}\n');
       expect(output.response).toBe('hi');
       expect(output.debug).toBe('d');
+    });
+
+    it('空字符串 → response 为空', () => {
+      const output = strategy.parseOutput('');
+      expect(output.response).toBe('');
+    });
+
+    it('JSON 数组 → 使用简化模式（非对象）', () => {
+      const output = strategy.parseOutput('[1,2,3]\n');
+      expect(output.response).toBe('[1,2,3]');
+    });
+
+    it('JSON 字符串字面量 → 使用简化模式', () => {
+      const output = strategy.parseOutput('"hello"\n');
+      expect(output.response).toBe('"hello"');
+    });
+
+    it('JSON null → 使用简化模式', () => {
+      const output = strategy.parseOutput('null\n');
+      expect(output.response).toBe('null');
+    });
+
+    it('JSON 对象缺少 response 字段 → response 为空字符串', () => {
+      const output = strategy.parseOutput('{"data":"d1"}\n');
+      expect(output.response).toBe('');
+      expect(output.data).toBe('d1');
     });
   });
 });
