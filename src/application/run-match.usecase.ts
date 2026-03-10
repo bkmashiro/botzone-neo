@@ -254,16 +254,20 @@ export class RunMatchUseCase {
         }),
       );
 
-      // Forfeit: if any bot returned empty response, that bot loses immediately
+      // Forfeit: if any bot returned empty response, mark game as error (no ELO change)
       const forfeitedBot = botResults.find(([, response]) => !response);
       if (forfeitedBot) {
         const forfeitedId = forfeitedBot[0];
-        this.logger.warn(`Bot ${forfeitedId} 无响应，判定弃权负局`);
+        this.logger.warn(`Bot ${forfeitedId} 无响应，判定弃权（游戏作废，不计分）`);
         const scores: Record<string, number> = {};
         for (const spec of task.bots) {
-          if (spec.id !== 'judger') scores[spec.id] = spec.id === forfeitedId ? 0 : 1;
+          if (spec.id !== 'judger') scores[spec.id] = 0;
         }
-        const result = match.finish(scores, compiles);
+        const result = {
+          ...match.finish(scores, compiles),
+          verdict: 'forfeit',
+          forfeitedBot: forfeitedId,
+        };
         await this.callbackService.finish(task.callback.finish, result);
         return;
       }
