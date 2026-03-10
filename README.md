@@ -260,12 +260,12 @@ docker/                      # Docker 相关配置
 | `NODE_ENV` | `development` | 运行环境 |
 | `REDIS_HOST` | `redis` | Redis 主机 |
 | `REDIS_PORT` | `6379` | Redis 端口 |
-| `JUDGE_CAPABILITY` | `15` | 最大并发对局数 |
 | `JUDGE_CONCURRENCY` | `15` | Bull 队列并发数 |
 | `COMPILE_TIME_LIMIT_MS` | `10000` | 编译超时（毫秒） |
-| `COMPILE_MEMORY_LIMIT_MB` | `512` | 编译内存限制（MB） |
+| `COMPILE_CACHE_SIZE` | `200` | 编译缓存条目上限 |
 | `MAX_MATCH_DURATION_MS` | `300000` | 单场对局最大时长（毫秒） |
 | `SANDBOX_BACKEND` | `nsjail` | 沙箱后端：`nsjail`（生产）/ `direct`（开发） |
+| `NSJAIL_PATH` | `/usr/bin/nsjail` | nsjail 二进制路径 |
 | `TRUST_IP` | `127.0.0.1` | 允许提交评测任务的 IP（逗号分隔） |
 | `CORS_ORIGIN` | `*` | CORS 允许的来源（`*` 或具体域名） |
 
