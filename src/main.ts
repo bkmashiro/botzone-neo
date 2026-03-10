@@ -30,8 +30,8 @@ async function bootstrap(): Promise<void> {
     allowedHeaders: ['Content-Type', 'X-Request-ID'],
   });
 
-  // 请求体大小限制（1MB）
-  app.use(json({ limit: '1mb' }));
+  // 请求体大小限制（与 MAX_TOTAL_TESTCASE_SIZE + 开销一致）
+  app.use(json({ limit: '110mb' }));
 
   // 全局异常过滤器
   app.useGlobalFilters(new AllExceptionsFilter());

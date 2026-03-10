@@ -23,8 +23,8 @@ RUN git clone --depth 1 --branch 3.4 https://github.com/google/nsjail.git /tmp/n
     && cp /tmp/nsjail/nsjail /usr/bin/nsjail \
     && rm -rf /tmp/nsjail
 
-# 安装 pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# 安装 pnpm（pin 到与本地一致的版本）
+RUN corepack enable && corepack prepare pnpm@10.30.3 --activate
 
 # 安装 Node.js 依赖
 COPY package.json pnpm-lock.yaml ./

@@ -26,6 +26,7 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "packageManager": "pnpm@10.30.3",
   "bugs": {
     "url": "https://github.com/bkmashiro/botzone-neo/issues"
   },
