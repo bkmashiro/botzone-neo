@@ -6,7 +6,10 @@ import * as domain from './domain';
 import * as domainOj from './domain/oj';
 import * as application from './application';
 import * as infraCompile from './infrastructure/compile';
+import * as infraCallback from './infrastructure/callback';
+import * as infraDataStore from './infrastructure/data-store';
 import * as infraSandbox from './infrastructure/sandbox';
+import * as infrastructure from './infrastructure';
 import * as strategies from './strategies';
 import * as strategiesOj from './strategies/oj';
 
@@ -30,10 +33,25 @@ describe('barrel exports', () => {
     expect(infraCompile.CompileService).toBeDefined();
   });
 
+  it('infrastructure/callback exports CallbackService', () => {
+    expect(infraCallback.CallbackService).toBeDefined();
+  });
+
+  it('infrastructure/data-store exports DataStoreService', () => {
+    expect(infraDataStore.DataStoreService).toBeDefined();
+  });
+
   it('infrastructure/sandbox exports sandbox types', () => {
     expect(infraSandbox.SANDBOX_TOKEN).toBeDefined();
     expect(infraSandbox.NsjailSandbox).toBeDefined();
     expect(infraSandbox.DirectSandbox).toBeDefined();
+  });
+
+  it('infrastructure root barrel re-exports all submodules', () => {
+    expect(infrastructure.CompileService).toBeDefined();
+    expect(infrastructure.CallbackService).toBeDefined();
+    expect(infrastructure.DataStoreService).toBeDefined();
+    expect(infrastructure.SANDBOX_TOKEN).toBeDefined();
   });
 
   it('strategies exports expected symbols', () => {

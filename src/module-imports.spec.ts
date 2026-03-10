@@ -34,10 +34,4 @@ describe('Module imports', () => {
     const mod = require('./interface/judge.module');
     expect(mod.JudgeModule).toBeDefined();
   });
-
-  it('should import sandbox/SandboxModule', () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('./sandbox/sandbox.module');
-    expect(mod.SandboxModule).toBeDefined();
-  });
 });
