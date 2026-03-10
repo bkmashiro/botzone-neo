@@ -252,6 +252,25 @@ docker/                      # Docker 相关配置
 | Python 3  | python3             | ✅       | ✅         |
 | TypeScript| tsc + node          | ✅       | ✅         |
 
+## 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `PORT` | `3001` | 服务监听端口 |
+| `NODE_ENV` | `development` | 运行环境 |
+| `DB_HOST` | `mariadb` | MariaDB 主机 |
+| `DB_PORT` | `3306` | MariaDB 端口 |
+| `DB_DATABASE` | `botzone` | 数据库名 |
+| `DB_USERNAME` | `botzone` | 数据库用户 |
+| `DB_PASSWORD` | `botzonepass` | 数据库密码 |
+| `REDIS_HOST` | `redis` | Redis 主机 |
+| `REDIS_PORT` | `6379` | Redis 端口 |
+| `JUDGE_CAPABILITY` | `15` | 最大并发对局数 |
+| `COMPILE_TIME_LIMIT_MS` | `10000` | 编译超时（毫秒） |
+| `COMPILE_MEMORY_LIMIT_MB` | `512` | 编译内存限制（MB） |
+| `SANDBOX_BACKEND` | `nsjail` | 沙箱后端：`nsjail`（生产）/ `direct`（开发） |
+| `TRUST_IP` | `127.0.0.1` | 允许提交评测任务的 IP（逗号分隔） |
+
 ## 评测结果（Verdict）
 
 | 代码 | 含义 | 说明 |
