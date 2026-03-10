@@ -13,7 +13,7 @@ import { Logger } from '@nestjs/common';
 import { BotInput, BotOutput } from '../../domain/bot';
 
 export const WEBHOOK_DEFAULT_TIMEOUT_MS = 10_000;
-export const WEBHOOK_MAX_TIMEOUT_MS = 30_000;
+export const WEBHOOK_MAX_TIMEOUT_MS = 360_000; // 6 min for human turns
 
 export class WebhookRunner {
   private readonly logger = new Logger(WebhookRunner.name);

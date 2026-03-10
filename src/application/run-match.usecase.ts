@@ -254,6 +254,20 @@ export class RunMatchUseCase {
         }),
       );
 
+      // Forfeit: if any bot returned empty response, that bot loses immediately
+      const forfeitedBot = botResults.find(([, response]) => !response);
+      if (forfeitedBot) {
+        const forfeitedId = forfeitedBot[0];
+        this.logger.warn(`Bot ${forfeitedId} 无响应，判定弃权负局`);
+        const scores: Record<string, number> = {};
+        for (const spec of task.bots) {
+          if (spec.id !== 'judger') scores[spec.id] = spec.id === forfeitedId ? 0 : 1;
+        }
+        const result = match.finish(scores, compiles);
+        await this.callbackService.finish(task.callback.finish, result);
+        return;
+      }
+
       // Merge bot responses into a combined dict for the judger.
       // If a bot outputs a JSON object (e.g. {"0": 8}), merge its keys directly
       // so the judger receives {"0": 8} instead of {"0": "{\"0\":8}"}.
