@@ -4,6 +4,12 @@
  * 每轮启动新的沙箱进程，通过 stdin 传入完整历史 JSON（官方协议格式），
  * 从 stdout 读取单行 JSON 输出。
  *
+ * 同时支持简化交互模式（Botzone 官方 wiki 定义）：
+ * Bot 输出首行是纯数字时，判定为简化模式，按如下格式解析：
+ *   第1行: response
+ *   第2行(可选): data
+ *   第3行(可选): globaldata
+ *
  * 不依赖 NestJS，不直接 spawn 进程——通过 ISandbox 接口执行。
  */
 
@@ -40,20 +46,36 @@ export class RestartStrategy implements IBotRunStrategy {
       };
     }
 
-    // 解析第一行 JSON 输出
-    const firstLine = result.stdout.trim().split('\n')[0] ?? '';
+    return this.parseOutput(result.stdout);
+  }
+
+  /** 解析 Bot 输出：支持 JSON 模式和简化交互模式 */
+  parseOutput(stdout: string): BotOutput {
+    const lines = stdout.trim().split('\n');
+    const firstLine = lines[0] ?? '';
+
+    // 尝试 JSON 对象模式（必须是 {} 包裹的对象，排除纯数字/字符串等）
     try {
-      const output = JSON.parse(firstLine) as BotOutput;
-      return {
-        response: output.response ?? '',
-        debug: output.debug,
-        data: output.data,
-        globaldata: output.globaldata,
-      };
+      const parsed: unknown = JSON.parse(firstLine);
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        const output = parsed as BotOutput;
+        return {
+          response: output.response ?? '',
+          debug: output.debug,
+          data: output.data,
+          globaldata: output.globaldata,
+        };
+      }
     } catch {
-      // 兼容：如果输出不是 JSON，整行作为 response
-      return { response: firstLine };
+      // fall through to simplified mode
     }
+
+    // 简化交互模式：第1行 response，第2行 data，第3行 globaldata
+    return {
+      response: firstLine,
+      data: lines[1],
+      globaldata: lines[2],
+    };
   }
 
   async afterRound(_bot: BotRuntime): Promise<void> {

@@ -84,4 +84,31 @@ describe('RestartStrategy', () => {
     await expect(strategy.afterRound(bot)).resolves.toBeUndefined();
     await expect(strategy.cleanup(bot)).resolves.toBeUndefined();
   });
+
+  describe('简化交互模式 (parseOutput)', () => {
+    it('纯数字首行 → response 为该数字', () => {
+      const output = strategy.parseOutput('42\n');
+      expect(output.response).toBe('42');
+    });
+
+    it('多行简化输出 → response + data + globaldata', () => {
+      const output = strategy.parseOutput('move_a1\nmy_data\nmy_global\n');
+      expect(output.response).toBe('move_a1');
+      expect(output.data).toBe('my_data');
+      expect(output.globaldata).toBe('my_global');
+    });
+
+    it('单行简化输出 → 只有 response', () => {
+      const output = strategy.parseOutput('hello\n');
+      expect(output.response).toBe('hello');
+      expect(output.data).toBeUndefined();
+      expect(output.globaldata).toBeUndefined();
+    });
+
+    it('JSON 输出仍正常解析', () => {
+      const output = strategy.parseOutput('{"response":"hi","debug":"d"}\n');
+      expect(output.response).toBe('hi');
+      expect(output.debug).toBe('d');
+    });
+  });
 });
