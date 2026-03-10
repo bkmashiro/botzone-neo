@@ -421,6 +421,75 @@ describe('JudgeController', () => {
     });
   });
 
+  describe('checker mode validation', () => {
+    it('should accept checker mode with both checkerSource and checkerLanguage', async () => {
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
+        callback: { finish: 'http://example.com/callback' },
+        judgeMode: 'checker',
+        checkerSource: '#include "testlib.h"\nint main() {}',
+        checkerLanguage: 'cpp',
+      };
+
+      const result = await controller.submitTask(body);
+      expect(result.jobId).toBe('job-456');
+    });
+
+    it('should throw when checker mode is missing checkerSource', async () => {
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
+        callback: { finish: 'http://example.com/callback' },
+        judgeMode: 'checker',
+        checkerLanguage: 'cpp',
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw when checker mode is missing checkerLanguage', async () => {
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
+        callback: { finish: 'http://example.com/callback' },
+        judgeMode: 'checker',
+        checkerSource: '#include "testlib.h"\nint main() {}',
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw when checkerSource exceeds 64KB in checker mode', async () => {
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
+        callback: { finish: 'http://example.com/callback' },
+        judgeMode: 'checker',
+        checkerSource: 'x'.repeat(65537),
+        checkerLanguage: 'cpp',
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+  });
+
   describe('testcase count limit', () => {
     it('should reject more than 1000 testcases', async () => {
       const testcases = Array.from({ length: 1001 }, (_, i) => ({
