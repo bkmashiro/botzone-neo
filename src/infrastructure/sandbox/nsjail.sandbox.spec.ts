@@ -177,6 +177,44 @@ describe('NsjailSandbox', () => {
     expect(result.exitCode).toBe(-1);
   });
 
+  describe('limit clamping', () => {
+    it('should clamp time limit exceeding 300s', () => {
+      const fakeProc = createFakeProcess();
+      const spawnMock = child_process.spawn as jest.Mock;
+      spawnMock.mockReturnValue(fakeProc);
+
+      sandbox.execute(makeRequest({ limit: { timeMs: 400_000, memoryMb: 256 } }));
+      fakeProc.emit('close', 0);
+
+      const args = spawnMock.mock.calls[spawnMock.mock.calls.length - 1][1] as string[];
+      expect(args[args.indexOf('--time_limit') + 1]).toBe('300');
+    });
+
+    it('should clamp memory limit below 16MB', () => {
+      const fakeProc = createFakeProcess();
+      const spawnMock = child_process.spawn as jest.Mock;
+      spawnMock.mockReturnValue(fakeProc);
+
+      sandbox.execute(makeRequest({ limit: { timeMs: 1000, memoryMb: 4 } }));
+      fakeProc.emit('close', 0);
+
+      const args = spawnMock.mock.calls[spawnMock.mock.calls.length - 1][1] as string[];
+      expect(args[args.indexOf('--rlimit_as') + 1]).toBe('16');
+    });
+
+    it('should clamp memory limit above 4096MB', () => {
+      const fakeProc = createFakeProcess();
+      const spawnMock = child_process.spawn as jest.Mock;
+      spawnMock.mockReturnValue(fakeProc);
+
+      sandbox.execute(makeRequest({ limit: { timeMs: 1000, memoryMb: 8192 } }));
+      fakeProc.emit('close', 0);
+
+      const args = spawnMock.mock.calls[spawnMock.mock.calls.length - 1][1] as string[];
+      expect(args[args.indexOf('--rlimit_as') + 1]).toBe('4096');
+    });
+  });
+
   describe('mount path sanitization', () => {
     it('should skip empty mount path', () => {
       const fakeProc = createFakeProcess();
