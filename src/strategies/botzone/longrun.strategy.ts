@@ -1,36 +1,33 @@
 /**
- * 常驻进程策略（骨架实现）
+ * LongrunStrategy — 长时运行策略（骨架 + TODO）
  *
- * TODO: 实现 SIGSTOP/SIGCONT 机制
- * - 首轮启动进程后保持运行
- * - 每轮通过 SIGCONT 唤醒，写入当轮输入，读取输出后 SIGSTOP
- * - 对局结束时 SIGKILL
+ * 首轮启动进程后保持运行，每轮通过 SIGCONT 唤醒，
+ * 写入当轮输入，读取输出后 SIGSTOP。对局结束时 SIGKILL。
  *
- * 该策略适用于需要在多轮间保持状态的 Bot（如 Monte Carlo Tree Search）。
+ * 适用于需要在多轮间保持状态的 Bot（如 MCTS）。
  */
 
-import { BotRuntime, BotInput, BotOutput } from '../../domain/bot';
-import { ISandbox } from '../../infrastructure/sandbox/sandbox.interface';
-import { IBotRunStrategy } from '../bot-run-strategy.interface';
+import { BotInput, BotOutput } from '../../domain/bot';
+import { ResourceUsage } from '../../infrastructure/process/resource-usage';
+import { BotRuntimeCtx, RoundResult } from './restart.strategy';
 
-export class LongrunStrategy implements IBotRunStrategy {
-  constructor(private readonly sandbox: ISandbox) {}
+/**
+ * 长时运行策略（TODO: 未实现）
+ */
+export class LongrunStrategy {
+  // TODO: 持有 ChildProcess 引用
+  // private readonly processes: Map<string, ChildProcess> = new Map();
 
-  /** 获取沙箱实例（供子类或未来实现使用） */
-  protected getSandbox(): ISandbox {
-    return this.sandbox;
+  async runRound(_ctx: BotRuntimeCtx, _input: BotInput): Promise<RoundResult> {
+    // TODO: 实现 SIGCONT + stdin/stdout 交互
+    const usage: ResourceUsage = { timeMs: 0, memoryKb: 0 };
+    return {
+      output: { response: '' },
+      usage,
+    };
   }
 
-  async runRound(_bot: BotRuntime, _input: BotInput): Promise<BotOutput> {
-    // TODO: 实现常驻进程的 SIGCONT + stdin/stdout 交互
-    throw new Error('Longrun 策略尚未实现');
-  }
-
-  async afterRound(_bot: BotRuntime): Promise<void> {
-    // TODO: SIGSTOP 暂停进程
-  }
-
-  async cleanup(_bot: BotRuntime): Promise<void> {
-    // TODO: SIGKILL 终止进程并清理资源
+  async cleanup(_ctx: BotRuntimeCtx): Promise<void> {
+    // TODO: SIGKILL 所有持有的进程
   }
 }
