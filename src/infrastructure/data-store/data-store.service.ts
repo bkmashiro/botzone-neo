@@ -2,11 +2,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
+/** globaldata 文件过期时间（默认 7 天） */
+const GLOBALDATA_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 /**
  * 数据持久化服务
  *
  * 管理 Bot 的 data（本局数据）和 globaldata（全局数据）。
- * 当前实现基于文件存储，接口设计支持未来切换到 DB/Redis。
+ * - data：内存存储，仅在对局期间有效
+ * - globaldata：文件存储，跨对局持久化，7 天 TTL 自动清理
  */
 @Injectable()
 export class DataStoreService {
@@ -30,10 +34,16 @@ export class DataStoreService {
     this.dataMap.set(botId, data);
   }
 
-  /** 获取全局持久化数据 */
+  /** 获取全局持久化数据（过期返回空） */
   async getGlobalData(botId: string): Promise<string> {
     try {
       const filePath = path.join(this.baseDir, `${botId}.json`);
+      const stat = await fs.stat(filePath);
+      if (Date.now() - stat.mtimeMs > GLOBALDATA_TTL_MS) {
+        await fs.unlink(filePath).catch(() => {});
+        this.logger.debug(`全局数据已过期并清理: ${botId}`);
+        return '';
+      }
       return await fs.readFile(filePath, 'utf-8');
     } catch {
       return '';
@@ -51,5 +61,32 @@ export class DataStoreService {
   /** 清除本局数据（对局结束时调用） */
   clearSessionData(): void {
     this.dataMap.clear();
+  }
+
+  /** 清理所有过期的 globaldata 文件 */
+  async cleanupExpiredGlobalData(): Promise<number> {
+    try {
+      const files = await fs.readdir(this.baseDir);
+      let cleaned = 0;
+      for (const file of files) {
+        if (!file.endsWith('.json')) continue;
+        const filePath = path.join(this.baseDir, file);
+        try {
+          const stat = await fs.stat(filePath);
+          if (Date.now() - stat.mtimeMs > GLOBALDATA_TTL_MS) {
+            await fs.unlink(filePath);
+            cleaned++;
+          }
+        } catch {
+          // file may have been deleted concurrently
+        }
+      }
+      if (cleaned > 0) {
+        this.logger.log(`清理了 ${cleaned} 个过期 globaldata 文件`);
+      }
+      return cleaned;
+    } catch {
+      return 0;
+    }
   }
 }
