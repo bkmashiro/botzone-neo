@@ -36,11 +36,7 @@ export class CustomChecker implements IChecker {
     private readonly workDir: string,
   ) {}
 
-  async check(
-    input: string,
-    expectedOutput: string,
-    actualOutput: string,
-  ): Promise<CheckResult> {
+  async check(input: string, expectedOutput: string, actualOutput: string): Promise<CheckResult> {
     // 将三个文件写入 checker 的工作目录
     const inputFile = path.join(this.workDir, 'input.txt');
     const expectedFile = path.join(this.workDir, 'expected.txt');
@@ -65,7 +61,9 @@ export class CustomChecker implements IChecker {
     });
 
     // checker 的判定信息通过 stderr 输出（testlib.h 标准）
-    const message = result.stderr.trim() || result.stdout.trim() || undefined;
+    // 截断到 1000 字符，防止恶意 checker 注入大量日志
+    const raw = result.stderr.trim() || result.stdout.trim() || '';
+    const message = raw ? (raw.length > 1000 ? raw.slice(0, 1000) + '...' : raw) : undefined;
 
     // 超时 → SE
     if (result.timedOut) {

@@ -190,6 +190,9 @@ export class JudgeController {
     if (!Array.isArray(body['testcases']) || body['testcases'].length === 0) {
       throw new BadRequestException('缺少 testcases');
     }
+    if (body['testcases'].length > 1000) {
+      throw new BadRequestException('testcases 数量不能超过 1000');
+    }
     for (const tc of body['testcases'] as Array<Record<string, unknown>>) {
       if (typeof tc['input'] === 'string' && tc['input'].length > MAX_TESTCASE_LENGTH) {
         throw new BadRequestException(`testcase ${tc['id']}: input 超过 10MB 限制`);
@@ -208,17 +211,37 @@ export class JudgeController {
     this.validateUrl(String(callback['finish']), 'callback.finish');
   }
 
-  /** 验证 URL 格式（仅允许 http/https） */
+  /** 验证 URL 格式（仅允许 http/https，拒绝内网地址） */
   private validateUrl(url: string, field: string): void {
     try {
       const parsed = new URL(url);
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
         throw new BadRequestException(`${field}: 仅支持 http/https 协议`);
       }
+      if (this.isPrivateHost(parsed.hostname)) {
+        throw new BadRequestException(`${field}: 不允许使用内网地址`);
+      }
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       throw new BadRequestException(`${field}: 无效的 URL 格式`);
     }
+  }
+
+  /** 检测是否为内网/回环地址（防止 SSRF） */
+  private isPrivateHost(hostname: string): boolean {
+    if (hostname === 'localhost' || hostname === '[::1]') return true;
+    // IPv4 private ranges
+    const ipv4Match = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+    if (ipv4Match) {
+      const [, a, b] = ipv4Match.map(Number);
+      if (a === 127) return true; // 127.0.0.0/8
+      if (a === 10) return true; // 10.0.0.0/8
+      if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+      if (a === 192 && b === 168) return true; // 192.168.0.0/16
+      if (a === 169 && b === 254) return true; // 169.254.0.0/16 link-local
+      if (a === 0) return true; // 0.0.0.0/8
+    }
+    return false;
   }
 
   /** 将旧格式 game Record 转为 BotSpec[] */

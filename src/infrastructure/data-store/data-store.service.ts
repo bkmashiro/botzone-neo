@@ -9,6 +9,12 @@ const GLOBALDATA_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** 清理间隔（每小时） */
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
+/** 单个 session data 值最大长度（1MB） */
+const MAX_SESSION_DATA_LENGTH = 1024 * 1024;
+
+/** globaldata 单个文件最大长度（1MB） */
+const MAX_GLOBALDATA_LENGTH = 1024 * 1024;
+
 /** 会话级数据作用域（每个对局独立，并发安全） */
 export interface SessionScope {
   getData(botId: string): string;
@@ -62,6 +68,11 @@ export class DataStoreService implements OnModuleInit {
     return {
       getData: (botId: string) => map.get(botId) ?? '',
       setData: (botId: string, data: string) => {
+        if (data.length > MAX_SESSION_DATA_LENGTH) {
+          this.logger.warn(`Session data 超过 1MB 限制 (botId=${botId})，已截断`);
+          map.set(botId, data.slice(0, MAX_SESSION_DATA_LENGTH));
+          return;
+        }
         map.set(botId, data);
       },
       clear: () => {
@@ -109,6 +120,10 @@ export class DataStoreService implements OnModuleInit {
 
   /** 设置全局持久化数据 */
   async setGlobalData(botId: string, data: string): Promise<void> {
+    if (data.length > MAX_GLOBALDATA_LENGTH) {
+      this.logger.warn(`globaldata 超过 1MB 限制 (botId=${botId})，已截断`);
+      data = data.slice(0, MAX_GLOBALDATA_LENGTH);
+    }
     await fs.mkdir(this.baseDir, { recursive: true });
     const filePath = this.safePath(botId);
     await fs.writeFile(filePath, data, 'utf-8');

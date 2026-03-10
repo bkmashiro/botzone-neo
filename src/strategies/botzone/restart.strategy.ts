@@ -13,11 +13,14 @@
  * 不依赖 NestJS，不直接 spawn 进程——通过 ISandbox 接口执行。
  */
 
+import { Logger } from '@nestjs/common';
 import { BotRuntime, BotInput, BotOutput } from '../../domain/bot';
 import { ISandbox } from '../../infrastructure/sandbox/sandbox.interface';
 import { IBotRunStrategy } from '../bot-run-strategy.interface';
 
 export class RestartStrategy implements IBotRunStrategy {
+  private readonly logger = new Logger(RestartStrategy.name);
+
   constructor(private readonly sandbox: ISandbox) {}
 
   async runRound(bot: BotRuntime, input: BotInput): Promise<BotOutput> {
@@ -67,7 +70,7 @@ export class RestartStrategy implements IBotRunStrategy {
         };
       }
     } catch {
-      // fall through to simplified mode
+      this.logger.debug(`Bot 输出非 JSON，使用简化交互模式: "${firstLine.slice(0, 50)}"`);
     }
 
     // 简化交互模式：第1行 response，第2行 data，第3行 globaldata

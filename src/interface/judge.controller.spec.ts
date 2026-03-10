@@ -348,4 +348,67 @@ describe('JudgeController', () => {
       await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
     });
   });
+
+  describe('SSRF protection', () => {
+    it.each([
+      'http://127.0.0.1/callback',
+      'http://localhost/callback',
+      'http://10.0.0.1/callback',
+      'http://172.16.0.1/callback',
+      'http://192.168.1.1/callback',
+      'http://169.254.169.254/latest/meta-data',
+      'http://0.0.0.0/callback',
+    ])('should reject private IP callback URL: %s', async (url) => {
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
+        callback: { finish: url },
+        judgeMode: 'standard',
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should accept public IP callback URL', async () => {
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
+        callback: { finish: 'http://203.0.113.1/callback' },
+        judgeMode: 'standard',
+      };
+
+      const result = await controller.submitTask(body);
+      expect(result.jobId).toBe('job-456');
+    });
+  });
+
+  describe('testcase count limit', () => {
+    it('should reject more than 1000 testcases', async () => {
+      const testcases = Array.from({ length: 1001 }, (_, i) => ({
+        id: i,
+        input: '1\n',
+        expectedOutput: '1\n',
+      }));
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases,
+        callback: { finish: 'http://example.com/callback' },
+        judgeMode: 'standard',
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+  });
 });
