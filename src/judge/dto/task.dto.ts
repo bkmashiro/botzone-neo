@@ -33,6 +33,7 @@ export class TaskDto {
   game!: Record<string, CodeDto>;
 
   /** 回调地址 */
+  @IsObject()
   callback!: CallbackDto;
 
   /** 初始化数据 */

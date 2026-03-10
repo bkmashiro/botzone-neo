@@ -64,9 +64,13 @@ describe('MatchRunner', () => {
   let callbackService: jest.Mocked<CallbackService>;
   let dataStoreService: jest.Mocked<DataStoreService>;
   const mockSpawn = child_process.spawn as jest.MockedFunction<typeof child_process.spawn>;
+  const mockExecSync = child_process.execSync as jest.MockedFunction<typeof child_process.execSync>;
 
   beforeEach(async () => {
     jest.clearAllMocks();
+
+    // 让 isNsjailAvailable() 返回 false，使策略降级为直接 spawn
+    mockExecSync.mockImplementation(() => { throw new Error('not found'); });
 
     // Mock fs
     (fs.mkdtemp as jest.Mock).mockResolvedValue('/tmp/botzone-test');
@@ -146,10 +150,11 @@ describe('MatchRunner', () => {
 
   describe('编译失败处理', () => {
     it('应该在 bot 编译失败时立刻结束并返回 CE', async () => {
-      // 裁判编译成功，玩家编译失败
+      // 注意：JS 中 Object.entries 对整数键（'0'）先于字符串键（'judger'）迭代
+      // 所以第一个 mock 对应 '0'，第二个对应 'judger'
       compileService.compile
-        .mockResolvedValueOnce({ verdict: 'OK', execCmd: '/tmp/judger', execArgs: [] })
-        .mockResolvedValueOnce({ verdict: 'CE', message: '语法错误' });
+        .mockResolvedValueOnce({ verdict: 'CE', message: '语法错误' })
+        .mockResolvedValueOnce({ verdict: 'OK', execCmd: '/tmp/judger', execArgs: [] });
 
       await runner.run(makeSimpleTask());
 
