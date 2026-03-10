@@ -5,9 +5,12 @@
  */
 
 import { Injectable, Logger, Inject } from '@nestjs/common';
+import { InjectMetric } from '@willsoto/nestjs-prometheus';
+import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import { Counter, Gauge, Histogram } from 'prom-client';
 
 import { Match, MatchTask, CompileSummary } from '../domain/match';
 import { JudgeCommand } from '../domain/round';
@@ -23,16 +26,35 @@ import { IBotRunStrategy } from '../strategies/bot-run-strategy.interface';
 import { RestartStrategy } from '../strategies/botzone/restart.strategy';
 import { LongrunStrategy } from '../strategies/botzone/longrun.strategy';
 
+/** 默认全局对局超时: 5 分钟 */
+const DEFAULT_MAX_MATCH_DURATION_MS = 5 * 60 * 1000;
+
+class MatchTimeoutError extends Error {
+  constructor(ms: number) {
+    super(`对局超时: 超过全局时间限制 ${ms}ms`);
+  }
+}
+
 @Injectable()
 export class RunMatchUseCase {
   private readonly logger = new Logger(RunMatchUseCase.name);
+  private readonly maxMatchDurationMs: number;
 
   constructor(
     private readonly compileService: CompileService,
     private readonly callbackService: CallbackService,
     private readonly dataStoreService: DataStoreService,
     @Inject(SANDBOX_TOKEN) private readonly sandbox: ISandbox,
-  ) {}
+    configService: ConfigService,
+    @InjectMetric('botzone_judge_requests_total') private readonly judgeRequestsTotal: Counter,
+    @InjectMetric('botzone_judge_duration_ms') private readonly judgeDurationMs: Histogram,
+    @InjectMetric('botzone_active_matches') private readonly activeMatches: Gauge,
+  ) {
+    this.maxMatchDurationMs = configService.get<number>(
+      'MAX_MATCH_DURATION_MS',
+      DEFAULT_MAX_MATCH_DURATION_MS,
+    );
+  }
 
   async execute(task: MatchTask): Promise<void> {
     const match = new Match(task);
@@ -43,113 +65,37 @@ export class RunMatchUseCase {
     const compiles: CompileSummary[] = [];
     const session = this.dataStoreService.createSession();
 
-    try {
-      // ── 阶段1: 编译所有代码 ──
-      for (const spec of task.bots) {
-        const compileSummary = await this.compileBot(spec, workDir, bots);
-        compiles.push(compileSummary);
+    // 全局超时控制
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(
+        () => reject(new MatchTimeoutError(this.maxMatchDurationMs)),
+        this.maxMatchDurationMs,
+      );
+    });
 
-        if (compileSummary.verdict !== Verdict.OK) {
+    try {
+      await Promise.race([
+        this.executeInner(task, match, workDir, strategy, bots, histories, compiles, session),
+        timeoutPromise,
+      ]);
+    } catch (err) {
+      if (err instanceof MatchTimeoutError) {
+        this.logger.error(err.message);
+        // 超时：所有玩家得 0 分，verdict = SE
+        if (!match.isFinished) {
           const scores: Record<string, number> = {};
-          for (const b of task.bots) {
-            if (b.id === 'judger') continue;
-            scores[b.id] = b.id === spec.id ? 0 : 1;
+          for (const spec of task.bots) {
+            if (spec.id !== 'judger') scores[spec.id] = 0;
           }
           const result = match.finish(scores, compiles);
           await this.callbackService.finish(task.callback.finish, result);
-          return;
         }
-        histories.set(spec.id, { requests: [], responses: [] });
+      } else {
+        throw err;
       }
-
-      // ── 阶段2: 对局循环 ──
-      const initdata = task.initdata ?? '';
-
-      while (match.hasRoundsLeft) {
-        const round = match.nextRound();
-        this.logger.debug(`对局轮次 ${round}`);
-
-        // 运行裁判
-        const judgerBot = bots.get('judger');
-        if (!judgerBot) {
-          this.logger.error('未找到裁判代码');
-          break;
-        }
-
-        const judgerHistory = histories.get('judger')!;
-        if (round === 1) {
-          judgerHistory.requests.push(initdata);
-        }
-
-        const judgerInput = await this.buildBotInput(judgerBot, judgerHistory, session);
-        const judgerOutput = await strategy.runRound(judgerBot, judgerInput);
-        await strategy.afterRound(judgerBot);
-
-        if (!judgerOutput.response) {
-          this.logger.error('裁判无输出');
-          break;
-        }
-
-        await this.updatePersistentData(judgerBot.id, judgerOutput, session);
-        judgerHistory.responses.push(judgerOutput.response);
-
-        // 解析裁判输出
-        let judgeCmd: JudgeCommand;
-        try {
-          judgeCmd = JSON.parse(judgerOutput.response) as JudgeCommand;
-        } catch {
-          this.logger.error('裁判输出 JSON 解析失败');
-          break;
-        }
-
-        // 判定是否结束
-        if (judgeCmd.command === 'finish') {
-          const scores = judgeCmd.content as Record<string, number>;
-          const result = match.finish(scores, compiles);
-          await this.callbackService.finish(task.callback.finish, result);
-          return;
-        }
-
-        // command === "request": 向各 bot 发送请求
-        const botResponses: Record<string, string> = {};
-        for (const [botId, request] of Object.entries(judgeCmd.content)) {
-          if (botId === 'judger') continue;
-          const bot = bots.get(botId);
-          if (!bot) continue;
-
-          const history = histories.get(botId)!;
-          history.requests.push(String(request));
-
-          const botInput = await this.buildBotInput(bot, history, session);
-          const output: BotOutput = await strategy.runRound(bot, botInput);
-          await strategy.afterRound(bot);
-
-          await this.updatePersistentData(botId, output, session);
-          history.responses.push(output.response);
-          botResponses[botId] = output.response;
-        }
-
-        match.addLog({ round, judgeCmd, botResponses });
-
-        // 将 bot 回复汇总给裁判作为下一轮的 request
-        judgerHistory.requests.push(JSON.stringify(botResponses));
-
-        // 回报当前轮进度
-        await this.callbackService.update(task.callback.update, {
-          round,
-          display: judgeCmd.display,
-        });
-      }
-
-      // 超过最大轮次
-      this.logger.warn('对局超过最大轮次限制');
-      const scores: Record<string, number> = {};
-      for (const spec of task.bots) {
-        if (spec.id !== 'judger') scores[spec.id] = 0;
-      }
-      const result = match.finish(scores, compiles);
-      await this.callbackService.finish(task.callback.finish, result);
     } finally {
+      clearTimeout(timeoutHandle);
       for (const bot of bots.values()) {
         await strategy.cleanup(bot);
       }
@@ -158,6 +104,123 @@ export class RunMatchUseCase {
         this.logger.warn(`临时目录清理失败: ${workDir}: ${err}`);
       });
     }
+  }
+
+  private async executeInner(
+    task: MatchTask,
+    match: Match,
+    workDir: string,
+    strategy: IBotRunStrategy,
+    bots: Map<string, BotRuntime>,
+    histories: Map<string, { requests: string[]; responses: string[] }>,
+    compiles: CompileSummary[],
+    session: SessionScope,
+  ): Promise<void> {
+    // ── 阶段1: 编译所有代码 ──
+    for (const spec of task.bots) {
+      const compileSummary = await this.compileBot(spec, workDir, bots);
+      compiles.push(compileSummary);
+
+      if (compileSummary.verdict !== Verdict.OK) {
+        const scores: Record<string, number> = {};
+        for (const b of task.bots) {
+          if (b.id === 'judger') continue;
+          scores[b.id] = b.id === spec.id ? 0 : 1;
+        }
+        const result = match.finish(scores, compiles);
+        await this.callbackService.finish(task.callback.finish, result);
+        return;
+      }
+      histories.set(spec.id, { requests: [], responses: [] });
+    }
+
+    // ── 阶段2: 对局循环 ──
+    const initdata = task.initdata ?? '';
+
+    while (match.hasRoundsLeft) {
+      const round = match.nextRound();
+      this.logger.debug(`对局轮次 ${round}`);
+
+      // 运行裁判
+      const judgerBot = bots.get('judger');
+      if (!judgerBot) {
+        this.logger.error('未找到裁判代码');
+        break;
+      }
+
+      const judgerHistory = histories.get('judger')!;
+      if (round === 1) {
+        judgerHistory.requests.push(initdata);
+      }
+
+      const judgerInput = await this.buildBotInput(judgerBot, judgerHistory, session);
+      const judgerOutput = await strategy.runRound(judgerBot, judgerInput);
+      await strategy.afterRound(judgerBot);
+
+      if (!judgerOutput.response) {
+        this.logger.error('裁判无输出');
+        break;
+      }
+
+      await this.updatePersistentData(judgerBot.id, judgerOutput, session);
+      judgerHistory.responses.push(judgerOutput.response);
+
+      // 解析裁判输出
+      let judgeCmd: JudgeCommand;
+      try {
+        judgeCmd = JSON.parse(judgerOutput.response) as JudgeCommand;
+      } catch {
+        this.logger.error('裁判输出 JSON 解析失败');
+        break;
+      }
+
+      // 判定是否结束
+      if (judgeCmd.command === 'finish') {
+        const scores = judgeCmd.content as Record<string, number>;
+        const result = match.finish(scores, compiles);
+        await this.callbackService.finish(task.callback.finish, result);
+        return;
+      }
+
+      // command === "request": 向各 bot 发送请求
+      const botResponses: Record<string, string> = {};
+      for (const [botId, request] of Object.entries(judgeCmd.content)) {
+        if (botId === 'judger') continue;
+        const bot = bots.get(botId);
+        if (!bot) continue;
+
+        const history = histories.get(botId)!;
+        history.requests.push(String(request));
+
+        const botInput = await this.buildBotInput(bot, history, session);
+        const output: BotOutput = await strategy.runRound(bot, botInput);
+        await strategy.afterRound(bot);
+
+        await this.updatePersistentData(botId, output, session);
+        history.responses.push(output.response);
+        botResponses[botId] = output.response;
+      }
+
+      match.addLog({ round, judgeCmd, botResponses });
+
+      // 将 bot 回复汇总给裁判作为下一轮的 request
+      judgerHistory.requests.push(JSON.stringify(botResponses));
+
+      // 回报当前轮进度
+      await this.callbackService.update(task.callback.update, {
+        round,
+        display: judgeCmd.display,
+      });
+    }
+
+    // 超过最大轮次
+    this.logger.warn('对局超过最大轮次限制');
+    const scores: Record<string, number> = {};
+    for (const spec of task.bots) {
+      if (spec.id !== 'judger') scores[spec.id] = 0;
+    }
+    const result = match.finish(scores, compiles);
+    await this.callbackService.finish(task.callback.finish, result);
   }
 
   private async compileBot(
