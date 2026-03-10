@@ -1,56 +1,62 @@
 /**
- * Testcase 领域对象（OJ 专用）
+ * OJ Testcase 领域对象
  *
  * 纯领域对象，零依赖。
+ * 描述 OJ 评测中的一个测试用例。
  */
-
-import { ResourceLimit } from '../bot';
 
 /** 单个测试用例 */
 export interface Testcase {
-  /** 测试用例编号 */
+  /** 用例编号（从 1 开始） */
   id: number;
-  /** 标准输入 */
+  /** 输入数据 */
   input: string;
-  /** 标准输出（期望答案） */
+  /** 期望输出（标准答案） */
   expectedOutput: string;
+  /** 本用例的时间限制（毫秒），未设置则使用全局限制 */
+  timeLimitMs?: number;
+  /** 本用例的内存限制（MB），未设置则使用全局限制 */
+  memoryLimitMb?: number;
 }
 
 /** OJ 评测任务定义 */
 export interface OJTask {
   type: 'oj';
-  /** 编程语言 */
+  /** 提交的代码语言 */
   language: string;
-  /** 源代码 */
+  /** 提交的源代码 */
   source: string;
-  /** 资源限制 */
-  limit: ResourceLimit;
   /** 测试用例列表 */
   testcases: Testcase[];
+  /** 全局时间限制（毫秒） */
+  timeLimitMs: number;
+  /** 全局内存限制（MB） */
+  memoryLimitMb: number;
   /** 回调地址 */
   callback: {
     finish: string;
   };
-  /** Special Judge 代码（可选，默认 diff 比较） */
-  checker?: {
-    language: string;
-    source: string;
-  };
+  /** 判题模式 */
+  judgeMode: 'standard' | 'checker';
+  /** special judge 的代码（judgeMode === 'checker' 时必填） */
+  checkerSource?: string;
+  /** special judge 的语言 */
+  checkerLanguage?: string;
 }
 
-/** 单个测试用例的评测结果 */
+/** 单个用例的评测结果 */
 export interface TestcaseResult {
-  /** 测试用例编号 */
+  /** 用例编号 */
   id: number;
   /** 评测结果 */
   verdict: string;
   /** 实际输出 */
   actualOutput?: string;
-  /** 耗时（毫秒） */
+  /** 用时（毫秒） */
   timeMs?: number;
-  /** 内存使用（MB） */
-  memoryMb?: number;
-  /** 错误信息 */
+  /** 内存（KB） */
+  memoryKb?: number;
+  /** 附加信息 */
   message?: string;
 }
 
@@ -58,8 +64,8 @@ export interface TestcaseResult {
 export interface OJResult {
   /** 总体评测结果 */
   verdict: string;
-  /** 各测试用例结果 */
+  /** 各用例的结果 */
   testcases: TestcaseResult[];
   /** 编译信息 */
-  compileMessage?: string;
+  compile: { verdict: string; message?: string };
 }
