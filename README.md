@@ -56,11 +56,11 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 ### 3. 本地开发
 
 ```bash
-npm install
-npm run start:dev
+pnpm install
+pnpm run start:dev
 ```
 
-需要本地运行 Redis 和 MariaDB。
+需要本地运行 Redis。
 
 ---
 
