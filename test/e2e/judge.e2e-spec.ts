@@ -8,6 +8,7 @@
 import { Test } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import * as request from 'supertest';
 import { JudgeController } from '../../src/interface/judge.controller';
 import { HealthController } from '../../src/interface/health.controller';
@@ -29,7 +30,10 @@ describe('Judge API E2E', () => {
     mockGetJobStatus = jest.fn();
 
     const moduleRef = await Test.createTestingModule({
-      imports: [ConfigModule.forRoot({ isGlobal: true })],
+      imports: [
+        ConfigModule.forRoot({ isGlobal: true }),
+        ThrottlerModule.forRoot([{ ttl: 60000, limit: 1000 }]),
+      ],
       controllers: [JudgeController, HealthController],
       providers: [
         {

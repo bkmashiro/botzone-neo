@@ -5,6 +5,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bull';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import { JudgeModule } from './judge.module';
@@ -35,6 +36,9 @@ import { JudgeModule } from './judge.module';
         },
       }),
     }),
+
+    // 限流：每分钟最多 60 次请求
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
 
     // Prometheus /metrics 端点
     PrometheusModule.register({ defaultMetrics: { enabled: true } }),

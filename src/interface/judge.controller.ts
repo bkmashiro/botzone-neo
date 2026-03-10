@@ -14,8 +14,10 @@ import {
   BadRequestException,
   NotFoundException,
   Logger,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { JudgeQueueService } from './judge-queue.service';
 import { MatchTask } from '../domain/match';
 import { BotSpec } from '../domain/bot';
@@ -30,6 +32,7 @@ import {
 } from './dto/task.dto';
 
 @ApiTags('judge')
+@UseGuards(ThrottlerGuard)
 @Controller('v1/judge')
 /**
  * Main judge controller for submitting and querying evaluation tasks.
