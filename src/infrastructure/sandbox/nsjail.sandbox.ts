@@ -5,13 +5,18 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { spawn, ChildProcess } from 'child_process';
 import { ISandbox, SandboxRequest, SandboxResult } from './sandbox.interface';
 
 @Injectable()
 export class NsjailSandbox implements ISandbox {
   private readonly logger = new Logger(NsjailSandbox.name);
-  private readonly nsjailPath = '/usr/bin/nsjail';
+  private readonly nsjailPath: string;
+
+  constructor(configService: ConfigService) {
+    this.nsjailPath = configService.get<string>('NSJAIL_PATH', '/usr/bin/nsjail');
+  }
 
   async execute(request: SandboxRequest): Promise<SandboxResult> {
     const args = this.buildArgs(request);
@@ -51,6 +56,9 @@ export class NsjailSandbox implements ISandbox {
         clearTimeout(timer);
         reject(err);
       });
+
+      // Ignore EPIPE: nsjail process may exit before consuming stdin
+      child.stdin?.on('error', () => {});
 
       if (request.stdin) {
         child.stdin?.write(request.stdin);

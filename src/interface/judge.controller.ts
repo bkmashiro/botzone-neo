@@ -31,6 +31,9 @@ import {
 
 @ApiTags('judge')
 @Controller('v1/judge')
+/**
+ * Main judge controller for submitting and querying evaluation tasks.
+ */
 export class JudgeController {
   private readonly logger = new Logger(JudgeController.name);
 
@@ -114,6 +117,10 @@ export class JudgeController {
     if (!callback || typeof callback !== 'object' || !callback['finish']) {
       throw new BadRequestException('缺少 callback 字段');
     }
+    this.validateUrl(String(callback['finish']), 'callback.finish');
+    if (callback['update']) {
+      this.validateUrl(String(callback['update']), 'callback.update');
+    }
     for (const [id, code] of Object.entries(game as Record<string, Record<string, unknown>>)) {
       if (!code['source'] || typeof code['source'] !== 'string') {
         throw new BadRequestException(`${id}: 缺少 source`);
@@ -194,6 +201,20 @@ export class JudgeController {
     const callback = body['callback'] as Record<string, unknown> | undefined;
     if (!callback || !callback['finish']) {
       throw new BadRequestException('缺少 callback.finish');
+    }
+    this.validateUrl(String(callback['finish']), 'callback.finish');
+  }
+
+  /** 验证 URL 格式（仅允许 http/https） */
+  private validateUrl(url: string, field: string): void {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new BadRequestException(`${field}: 仅支持 http/https 协议`);
+      }
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException(`${field}: 无效的 URL 格式`);
     }
   }
 

@@ -84,7 +84,7 @@ import { NsjailSandbox } from '../infrastructure/sandbox/nsjail.sandbox';
       useFactory: (config: ConfigService) => {
         const sandboxType = config.get<string>('SANDBOX_TYPE', 'direct');
         if (sandboxType === 'nsjail') {
-          return new NsjailSandbox();
+          return new NsjailSandbox(config);
         }
         return new DirectSandbox();
       },

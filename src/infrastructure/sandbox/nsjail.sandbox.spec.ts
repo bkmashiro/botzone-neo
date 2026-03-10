@@ -8,7 +8,7 @@ jest.mock('child_process');
 interface FakeProcess extends EventEmitter {
   stdout: EventEmitter;
   stderr: EventEmitter;
-  stdin: { write: jest.Mock; end: jest.Mock };
+  stdin: { write: jest.Mock; end: jest.Mock; on: jest.Mock };
   kill: jest.Mock;
 }
 
@@ -20,7 +20,7 @@ describe('NsjailSandbox', () => {
     return Object.assign(emitter, {
       stdout: new EventEmitter(),
       stderr: new EventEmitter(),
-      stdin: { write: jest.fn(), end: jest.fn() },
+      stdin: { write: jest.fn(), end: jest.fn(), on: jest.fn() },
       kill: jest.fn(),
     }) as FakeProcess;
   }
@@ -40,7 +40,10 @@ describe('NsjailSandbox', () => {
   }
 
   beforeEach(() => {
-    sandbox = new NsjailSandbox();
+    const mockConfig = {
+      get: jest.fn().mockReturnValue('/usr/bin/nsjail'),
+    } as unknown as import('@nestjs/config').ConfigService;
+    sandbox = new NsjailSandbox(mockConfig);
     jest.useFakeTimers();
   });
 
