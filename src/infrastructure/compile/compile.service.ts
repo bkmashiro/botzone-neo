@@ -35,11 +35,7 @@ export class CompileService {
   private readonly maxCacheSize = 200;
 
   constructor(private readonly configService: ConfigService) {
-    const langs: ILanguage[] = [
-      new CppLanguage(),
-      new PythonLanguage(),
-      new TypeScriptLanguage(),
-    ];
+    const langs: ILanguage[] = [new CppLanguage(), new PythonLanguage(), new TypeScriptLanguage()];
     for (const lang of langs) {
       this.languages.set(lang.name, lang);
     }
@@ -111,7 +107,10 @@ export class CompileService {
     return this.languages.get(name);
   }
 
-  private runCompiler(cmd: string, args: string[]): Promise<{
+  private runCompiler(
+    cmd: string,
+    args: string[],
+  ): Promise<{
     stdout: string;
     stderr: string;
     exitCode: number;
@@ -152,14 +151,17 @@ export class CompileService {
   private evictCache(): void {
     if (this.cache.size <= this.maxCacheSize) return;
 
-    const entries = Array.from(this.cache.entries())
-      .sort((a, b) => a[1].lastAccess - b[1].lastAccess);
+    const entries = Array.from(this.cache.entries()).sort(
+      (a, b) => a[1].lastAccess - b[1].lastAccess,
+    );
 
     const toRemove = entries.slice(0, entries.length - this.maxCacheSize);
     for (const [key] of toRemove) {
       this.cache.delete(key);
       const dir = path.join(this.cacheDir, key);
-      fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+      fs.rm(dir, { recursive: true, force: true }).catch((err) => {
+        this.logger.warn(`缓存清理失败: ${dir}: ${err}`);
+      });
     }
   }
 }

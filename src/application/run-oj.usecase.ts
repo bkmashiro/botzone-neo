@@ -4,7 +4,7 @@
  * 编译 → 逐个测试用例运行 → 判定 → 回报结果
  */
 
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -22,6 +22,8 @@ import { CustomChecker } from '../strategies/oj/custom.checker';
 
 @Injectable()
 export class RunOJUseCase {
+  private readonly logger = new Logger(RunOJUseCase.name);
+
   constructor(
     private readonly compileService: CompileService,
     private readonly callbackService: CallbackService,
@@ -109,11 +111,7 @@ export class RunOJUseCase {
           continue;
         }
 
-        const checkResult = await checker.check(
-          tc.input,
-          tc.expectedOutput,
-          sandboxResult.stdout,
-        );
+        const checkResult = await checker.check(tc.input, tc.expectedOutput, sandboxResult.stdout);
 
         testcaseResults.push({
           id: tc.id,
@@ -136,7 +134,9 @@ export class RunOJUseCase {
       };
       await this.callbackService.finish(task.callback.finish, result);
     } finally {
-      await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
+      await fs.rm(workDir, { recursive: true, force: true }).catch((err) => {
+        this.logger.warn(`临时目录清理失败: ${workDir}: ${err}`);
+      });
     }
   }
 }

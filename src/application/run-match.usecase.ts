@@ -154,7 +154,9 @@ export class RunMatchUseCase {
         await strategy.cleanup(bot);
       }
       session.clear();
-      await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
+      await fs.rm(workDir, { recursive: true, force: true }).catch((err) => {
+        this.logger.warn(`临时目录清理失败: ${workDir}: ${err}`);
+      });
     }
   }
 
@@ -199,7 +201,11 @@ export class RunMatchUseCase {
     };
   }
 
-  private async updatePersistentData(botId: string, output: BotOutput, session: SessionScope): Promise<void> {
+  private async updatePersistentData(
+    botId: string,
+    output: BotOutput,
+    session: SessionScope,
+  ): Promise<void> {
     if (output.data !== undefined) {
       session.setData(botId, output.data);
     }

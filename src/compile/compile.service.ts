@@ -34,11 +34,7 @@ export class CompileService {
 
   constructor(private readonly configService: ConfigService) {
     // 注册支持的语言
-    const langs: ILanguage[] = [
-      new CppLanguage(),
-      new PythonLanguage(),
-      new TypeScriptLanguage(),
-    ];
+    const langs: ILanguage[] = [new CppLanguage(), new PythonLanguage(), new TypeScriptLanguage()];
     for (const lang of langs) {
       this.languages.set(lang.name, lang);
     }
@@ -66,8 +62,7 @@ export class CompileService {
     const cached = this.cache.get(hash);
     if (cached) {
       // 验证关键文件是否仍存在
-      const checkPath =
-        cached.execArgs.length > 0 ? cached.execArgs[0] : cached.execCmd;
+      const checkPath = cached.execArgs.length > 0 ? cached.execArgs[0] : cached.execCmd;
       try {
         await fs.access(checkPath);
         cached.lastAccess = Date.now();
@@ -123,7 +118,10 @@ export class CompileService {
   }
 
   /** 执行编译器进程 */
-  private runCompiler(cmd: string, args: string[]): Promise<{
+  private runCompiler(
+    cmd: string,
+    args: string[],
+  ): Promise<{
     stdout: string;
     stderr: string;
     exitCode: number;
@@ -165,15 +163,18 @@ export class CompileService {
   private evictCache(): void {
     if (this.cache.size <= this.maxCacheSize) return;
 
-    const entries = Array.from(this.cache.entries())
-      .sort((a, b) => a[1].lastAccess - b[1].lastAccess);
+    const entries = Array.from(this.cache.entries()).sort(
+      (a, b) => a[1].lastAccess - b[1].lastAccess,
+    );
 
     const toRemove = entries.slice(0, entries.length - this.maxCacheSize);
     for (const [key] of toRemove) {
       this.cache.delete(key);
       // 异步清理文件，不阻塞主流程
       const dir = path.join(this.cacheDir, key);
-      fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+      fs.rm(dir, { recursive: true, force: true }).catch((err) => {
+        this.logger.warn(`缓存清理失败: ${dir}: ${err}`);
+      });
     }
   }
 }

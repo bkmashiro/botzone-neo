@@ -41,24 +41,15 @@ export class MatchRunner {
   async run(task: Task): Promise<void> {
     const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'botzone-'));
     const log: unknown[] = [];
-    const compileResults: Record<
-      string,
-      { verdict: Verdict; message?: string }
-    > = {};
+    const compileResults: Record<string, { verdict: Verdict; message?: string }> = {};
     const botContexts: Map<string, BotContext> = new Map();
-    const histories: Map<
-      string,
-      { requests: string[]; responses: string[] }
-    > = new Map();
+    const histories: Map<string, { requests: string[]; responses: string[] }> = new Map();
     const strategy = this.createStrategy(task.runMode ?? 'restart');
 
     try {
       // ── 阶段1：编译所有代码 ──
       for (const [id, code] of Object.entries(task.game)) {
-        const result: CompileResult = await this.compileService.compile(
-          code.language,
-          code.source,
-        );
+        const result: CompileResult = await this.compileService.compile(code.language, code.source);
         compileResults[id] = {
           verdict: result.verdict,
           message: result.message,
@@ -75,10 +66,7 @@ export class MatchRunner {
             log,
             compile: compileResults,
           };
-          await this.callbackService.finish(
-            task.callback.finish,
-            gameResult,
-          );
+          await this.callbackService.finish(task.callback.finish, gameResult);
           return;
         }
 
@@ -99,9 +87,7 @@ export class MatchRunner {
       // ── 阶段2：对局循环 ──
       let round = 0;
       const initdataStr: string =
-        typeof task.initdata === 'object'
-          ? JSON.stringify(task.initdata)
-          : (task.initdata ?? '');
+        typeof task.initdata === 'object' ? JSON.stringify(task.initdata) : (task.initdata ?? '');
 
       while (round < MAX_ROUNDS) {
         round++;
@@ -125,24 +111,17 @@ export class MatchRunner {
           requests: judgerHistory.requests,
           responses: judgerHistory.responses,
           data: await this.dataStoreService.getData(judgerCtx.id),
-          globaldata: await this.dataStoreService.getGlobalData(
-            judgerCtx.id,
-          ),
+          globaldata: await this.dataStoreService.getGlobalData(judgerCtx.id),
           time_limit: judgerCtx.limit.time,
           memory_limit: judgerCtx.limit.memory,
         };
 
-        const judgerOutput = await strategy.runRound(
-          judgerCtx,
-          judgerBotInput,
-        );
+        const judgerOutput = await strategy.runRound(judgerCtx, judgerBotInput);
         await strategy.afterRound(judgerCtx);
 
         // 裁判运行异常
         if (judgerOutput.verdict && judgerOutput.verdict !== 'OK') {
-          this.logger.error(
-            `裁判运行异常: ${judgerOutput.verdict} - ${judgerOutput.debug}`,
-          );
+          this.logger.error(`裁判运行异常: ${judgerOutput.verdict} - ${judgerOutput.debug}`);
           log.push({
             judge: {
               error: judgerOutput.verdict,
@@ -159,18 +138,13 @@ export class MatchRunner {
 
         // 更新裁判持久化数据
         if (judgerOutput.data !== undefined) {
-          await this.dataStoreService.setData(
-            judgerCtx.id,
-            judgerOutput.data,
-          );
+          await this.dataStoreService.setData(judgerCtx.id, judgerOutput.data);
         }
 
         // 解析裁判输出
         let judgeResult: JudgeOutput;
         try {
-          judgeResult = JSON.parse(
-            judgerOutput.response,
-          ) as JudgeOutput;
+          judgeResult = JSON.parse(judgerOutput.response) as JudgeOutput;
         } catch {
           this.logger.error('裁判输出 JSON 解析失败');
           log.push({
@@ -190,18 +164,13 @@ export class MatchRunner {
             log,
             compile: compileResults,
           };
-          await this.callbackService.finish(
-            task.callback.finish,
-            gameResult,
-          );
+          await this.callbackService.finish(task.callback.finish, gameResult);
           return;
         }
 
         // ── command === "request"：向各 bot 发送请求 ──
         const botOutputs: Record<string, string> = {};
-        for (const [botId, request] of Object.entries(
-          judgeResult.content,
-        )) {
+        for (const [botId, request] of Object.entries(judgeResult.content)) {
           if (botId === 'judger') continue;
           const ctx = botContexts.get(botId);
           if (!ctx) continue;
@@ -218,17 +187,12 @@ export class MatchRunner {
             memory_limit: ctx.limit.memory,
           };
 
-          const output: BotOutput = await strategy.runRound(
-            ctx,
-            botInput,
-          );
+          const output: BotOutput = await strategy.runRound(ctx, botInput);
           await strategy.afterRound(ctx);
 
           // 记录 bot 运行时错误（TLE/RE/MLE 等），但仍继续对局让裁判判定
           if (output.verdict && output.verdict !== 'OK') {
-            this.logger.warn(
-              `Bot ${botId} 运行异常: ${output.verdict} - ${output.debug}`,
-            );
+            this.logger.warn(`Bot ${botId} 运行异常: ${output.verdict} - ${output.debug}`);
           }
 
           // 更新持久化数据
@@ -236,10 +200,7 @@ export class MatchRunner {
             await this.dataStoreService.setData(botId, output.data);
           }
           if (output.globaldata !== undefined) {
-            await this.dataStoreService.setGlobalData(
-              botId,
-              output.globaldata,
-            );
+            await this.dataStoreService.setGlobalData(botId, output.globaldata);
           }
 
           history.responses.push(output.response);
@@ -281,9 +242,9 @@ export class MatchRunner {
         await strategy.cleanup(ctx);
       }
       this.dataStoreService.clearSessionData();
-      await fs
-        .rm(workDir, { recursive: true, force: true })
-        .catch(() => {});
+      await fs.rm(workDir, { recursive: true, force: true }).catch((err) => {
+        this.logger.warn(`临时目录清理失败: ${workDir}: ${err}`);
+      });
     }
   }
 

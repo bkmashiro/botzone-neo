@@ -43,10 +43,7 @@ export class RestartStrategy implements IBotRunStrategy {
   }
 
   /** 通过 nsjail 沙箱执行 */
-  private async runWithNsjail(
-    botCtx: BotContext,
-    inputJson: string,
-  ): Promise<BotOutput> {
+  private async runWithNsjail(botCtx: BotContext, inputJson: string): Promise<BotOutput> {
     const timeLimitSec = Math.ceil(botCtx.limit.time / 1000);
     const result = await this.nsjailService!.execute(
       {
@@ -68,9 +65,7 @@ export class RestartStrategy implements IBotRunStrategy {
     }
 
     if (result.exitCode !== 0) {
-      this.logger.warn(
-        `Bot ${botCtx.id} nsjail 退出码: ${result.exitCode}`,
-      );
+      this.logger.warn(`Bot ${botCtx.id} nsjail 退出码: ${result.exitCode}`);
       return {
         response: '',
         debug: result.stderr || `进程异常退出 (code=${result.exitCode})`,
@@ -82,10 +77,7 @@ export class RestartStrategy implements IBotRunStrategy {
   }
 
   /** 直接 spawn 执行（开发环境 fallback） */
-  private runDirect(
-    botCtx: BotContext,
-    inputJson: string,
-  ): Promise<BotOutput> {
+  private runDirect(botCtx: BotContext, inputJson: string): Promise<BotOutput> {
     return new Promise((resolve) => {
       const timeoutMs = botCtx.limit.time;
 
@@ -126,9 +118,7 @@ export class RestartStrategy implements IBotRunStrategy {
         clearTimeout(timer);
 
         if (code !== 0) {
-          this.logger.warn(
-            `Bot ${botCtx.id} 退出码: ${code}, stderr: ${stderr}`,
-          );
+          this.logger.warn(`Bot ${botCtx.id} 退出码: ${code}, stderr: ${stderr}`);
           done({
             response: '',
             debug: stderr || `进程异常退出 (code=${code})`,
@@ -150,7 +140,8 @@ export class RestartStrategy implements IBotRunStrategy {
         });
       });
 
-      // 写入输入并关闭 stdin
+      // 写入输入并关闭 stdin（进程可能已退出，忽略 EPIPE）
+      child.stdin.on('error', () => {});
       child.stdin.write(inputJson);
       child.stdin.end();
     });
@@ -184,9 +175,7 @@ export class RestartStrategy implements IBotRunStrategy {
       this.logger.log('nsjail 可用，使用沙箱模式');
     } catch {
       this.nsjailAvailable = false;
-      this.logger.warn(
-        'nsjail 不可用，降级为直接执行模式（仅限开发环境）',
-      );
+      this.logger.warn('nsjail 不可用，降级为直接执行模式（仅限开发环境）');
     }
     return this.nsjailAvailable;
   }
