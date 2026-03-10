@@ -12,6 +12,7 @@ import * as request from 'supertest';
 import { JudgeController } from '../../src/interface/judge.controller';
 import { HealthController } from '../../src/interface/health.controller';
 import { JudgeQueueService } from '../../src/interface/judge-queue.service';
+import { AllExceptionsFilter } from '../../src/interface/all-exceptions.filter';
 
 describe('Judge API E2E', () => {
   let app: INestApplication;
@@ -40,6 +41,7 @@ describe('Judge API E2E', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
+    app.useGlobalFilters(new AllExceptionsFilter());
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -264,5 +266,31 @@ describe('Judge API E2E', () => {
     mockGetJobStatus.mockResolvedValue(null);
 
     await request(app.getHttpServer()).get('/v1/judge/nonexistent/status').expect(404);
+  });
+
+  // ── 错误响应格式 ──
+
+  it('400 错误包含标准化字段 (statusCode, error, message, timestamp, path)', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/v1/judge')
+      .send({ type: 'botzone' })
+      .expect(400);
+
+    expect(res.body.statusCode).toBe(400);
+    expect(res.body.error).toBeDefined();
+    expect(res.body.message).toBeDefined();
+    expect(res.body.timestamp).toBeDefined();
+    expect(res.body.path).toBe('/v1/judge');
+  });
+
+  it('404 错误包含标准化字段', async () => {
+    mockGetJobStatus.mockResolvedValue(null);
+
+    const res = await request(app.getHttpServer()).get('/v1/judge/xxx/status').expect(404);
+
+    expect(res.body.statusCode).toBe(404);
+    expect(res.body.error).toBe('NOT_FOUND');
+    expect(res.body.message).toContain('xxx');
+    expect(res.body.path).toBe('/v1/judge/xxx/status');
   });
 });
