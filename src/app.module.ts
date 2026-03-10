@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bull';
-import { JudgeModule } from './judge/judge.module';
+import { JudgeModule } from './interface/judge.module';
 
 /**
  * 应用根模块

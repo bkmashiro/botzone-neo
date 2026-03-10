@@ -1,22 +1,28 @@
 /**
- * JudgeModule — 评测模块（新架构）
+ * JudgeModule — 评测模块
  *
  * 注册控制器、用例、基础设施服务。
+ * 沙箱实现通过 SANDBOX_TOKEN 注入，默认 DirectSandbox（开发环境）。
+ * 生产环境切换为 NsjailSandbox。
  */
 
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+
+// Interface
 import { JudgeController } from './judge.controller';
+
+// Application
 import { RunMatchUseCase } from '../application/run-match.usecase';
 import { RunOJUseCase } from '../application/run-oj.usecase';
-import { CompileUseCase } from '../application/compile.usecase';
+
+// Infrastructure
 import { CompileService } from '../infrastructure/compile/compile.service';
 import { CallbackService } from '../infrastructure/callback/callback.service';
 import { DataStoreService } from '../infrastructure/data-store/data-store.service';
-import { DirectSandboxFactory, ISandboxFactory } from '../infrastructure/process/sandbox-factory';
-
-/** ISandboxFactory 的注入 token */
-export const SANDBOX_FACTORY = 'SANDBOX_FACTORY';
+import { SANDBOX_TOKEN } from '../infrastructure/sandbox/sandbox.interface';
+import { DirectSandbox } from '../infrastructure/sandbox/direct.sandbox';
+import { NsjailSandbox } from '../infrastructure/sandbox/nsjail.sandbox';
 
 @Module({
   imports: [ConfigModule],
@@ -25,38 +31,23 @@ export const SANDBOX_FACTORY = 'SANDBOX_FACTORY';
     // 用例层
     RunMatchUseCase,
     RunOJUseCase,
-    CompileUseCase,
 
     // 基础设施层
     CompileService,
     CallbackService,
     DataStoreService,
 
-    // 沙箱工厂：开发环境用 DirectSandboxFactory
+    // 沙箱：根据环境变量选择实现
     {
-      provide: 'ISandboxFactory',
-      useFactory: () => new DirectSandboxFactory(),
-    },
-
-    // 注入 ISandboxFactory 到用例层
-    {
-      provide: RunMatchUseCase,
-      useFactory: (
-        compileUseCase: CompileUseCase,
-        callbackService: CallbackService,
-        dataStoreService: DataStoreService,
-        sandboxFactory: ISandboxFactory,
-      ) => new RunMatchUseCase(compileUseCase, callbackService, dataStoreService, sandboxFactory),
-      inject: [CompileUseCase, CallbackService, DataStoreService, 'ISandboxFactory'],
-    },
-    {
-      provide: RunOJUseCase,
-      useFactory: (
-        compileUseCase: CompileUseCase,
-        callbackService: CallbackService,
-        sandboxFactory: ISandboxFactory,
-      ) => new RunOJUseCase(compileUseCase, callbackService, sandboxFactory),
-      inject: [CompileUseCase, CallbackService, 'ISandboxFactory'],
+      provide: SANDBOX_TOKEN,
+      useFactory: (config: ConfigService) => {
+        const sandboxType = config.get<string>('SANDBOX_TYPE', 'direct');
+        if (sandboxType === 'nsjail') {
+          return new NsjailSandbox();
+        }
+        return new DirectSandbox();
+      },
+      inject: [ConfigService],
     },
   ],
 })
