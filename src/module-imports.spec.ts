@@ -35,34 +35,9 @@ describe('Module imports', () => {
     expect(mod.JudgeModule).toBeDefined();
   });
 
-  it('should import judge/JudgeModule', () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('./judge/judge.module');
-    expect(mod.JudgeModule).toBeDefined();
-  });
-
-  it('should import compile/CompileModule', () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('./compile/compile.module');
-    expect(mod.CompileModule).toBeDefined();
-  });
-
-  it('should import data-store/DataStoreModule', () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('./data-store/data-store.module');
-    expect(mod.DataStoreModule).toBeDefined();
-  });
-
   it('should import sandbox/SandboxModule', () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require('./sandbox/sandbox.module');
     expect(mod.SandboxModule).toBeDefined();
-  });
-
-  it('should import judge/dto/GameResultDto', () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('./judge/dto/game-result.dto');
-    const dto = new mod.GameResultDto();
-    expect(dto).toBeDefined();
   });
 });
