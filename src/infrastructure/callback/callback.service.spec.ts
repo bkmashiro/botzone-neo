@@ -14,69 +14,96 @@ describe('CallbackService (infrastructure)', () => {
 
   describe('update', () => {
     it('should POST payload to the URL', async () => {
-      const mockFetch = jest.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(null, { status: 200 }),
-      );
+      const mockFetch = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(new Response(null, { status: 200 }));
 
       await service.update('http://cb.test/update', { data: 'test' });
 
-      expect(mockFetch).toHaveBeenCalledWith('http://cb.test/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: 'test' }),
-      });
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://cb.test/update',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: 'test' }),
+        }),
+      );
     });
 
     it('should handle non-ok responses without throwing', async () => {
-      jest.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(null, { status: 503, statusText: 'Service Unavailable' }),
-      );
+      jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(new Response(null, { status: 503, statusText: 'Service Unavailable' }));
 
-      await expect(
-        service.update('http://cb.test/update', {}),
-      ).resolves.toBeUndefined();
+      await expect(service.update('http://cb.test/update', {})).resolves.toBeUndefined();
     });
 
     it('should handle fetch errors without throwing', async () => {
       jest.spyOn(global, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
 
-      await expect(
-        service.update('http://cb.test/update', {}),
-      ).resolves.toBeUndefined();
+      await expect(service.update('http://cb.test/update', {})).resolves.toBeUndefined();
     });
   });
 
   describe('finish', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
     it('should POST result to the URL', async () => {
-      const mockFetch = jest.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(null, { status: 200 }),
-      );
+      const mockFetch = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(new Response(null, { status: 200 }));
 
       await service.finish('http://cb.test/finish', { done: true });
 
-      expect(mockFetch).toHaveBeenCalledWith('http://cb.test/finish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ done: true }),
-      });
-    });
-
-    it('should handle non-ok responses without throwing', async () => {
-      jest.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(null, { status: 500, statusText: 'Error' }),
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://cb.test/finish',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ done: true }),
+        }),
       );
-
-      await expect(
-        service.finish('http://cb.test/finish', {}),
-      ).resolves.toBeUndefined();
     });
 
-    it('should handle fetch errors without throwing', async () => {
-      jest.spyOn(global, 'fetch').mockRejectedValue(new Error('Timeout'));
+    it('should not retry on 4xx response', async () => {
+      const mockFetch = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(new Response(null, { status: 404, statusText: 'Not Found' }));
 
-      await expect(
-        service.finish('http://cb.test/finish', {}),
-      ).resolves.toBeUndefined();
+      await service.finish('http://cb.test/finish', {});
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should retry on 5xx response and succeed on retry', async () => {
+      const mockFetch = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValueOnce(new Response(null, { status: 500, statusText: 'Error' }))
+        .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+      const finishPromise = service.finish('http://cb.test/finish', {});
+      await jest.advanceTimersByTimeAsync(1000);
+      await finishPromise;
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should retry on network errors and exhaust retries', async () => {
+      const mockFetch = jest.spyOn(global, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+
+      const finishPromise = service.finish('http://cb.test/finish', {});
+      await jest.advanceTimersByTimeAsync(1000);
+      await jest.advanceTimersByTimeAsync(2000);
+      await jest.advanceTimersByTimeAsync(4000);
+      await finishPromise;
+
+      expect(mockFetch).toHaveBeenCalledTimes(4); // 1 initial + 3 retries
     });
   });
 });
