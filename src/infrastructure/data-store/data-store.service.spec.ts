@@ -128,9 +128,9 @@ describe('DataStoreService', () => {
 
       await service.setGlobalData('../etc/passwd', 'data');
 
-      // The botId should be sanitized to remove path traversal
+      // The botId should be sanitized to remove path traversal (with hash suffix for collision resistance)
       expect(mockedFs.writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('___etc_passwd.json'),
+        expect.stringMatching(/___etc_passwd-[0-9a-f]{8}\.json$/),
         'data',
         'utf-8',
       );

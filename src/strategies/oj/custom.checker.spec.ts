@@ -154,7 +154,7 @@ describe('CustomChecker (Codeforces testlib.h 格式)', () => {
     expect(actual).toBe('actual out');
   });
 
-  it('传递文件路径作为 checker 参数', async () => {
+  it('传递相对文件路径作为 checker 参数（兼容 nsjail 路径映射）', async () => {
     const { sandbox, lastRequest } = mockSandbox({
       stdout: '',
       stderr: '',
@@ -165,9 +165,7 @@ describe('CustomChecker (Codeforces testlib.h 格式)', () => {
     await checker.check('in', 'exp', 'act');
 
     const req = lastRequest()!;
-    expect(req.compiled.args).toContain(path.join(workDir, 'input.txt'));
-    expect(req.compiled.args).toContain(path.join(workDir, 'expected.txt'));
-    expect(req.compiled.args).toContain(path.join(workDir, 'actual.txt'));
+    expect(req.compiled.args).toEqual(['input.txt', 'expected.txt', 'actual.txt']);
   });
 
   it('exit code 2 无 stderr → 默认 "Presentation Error"', async () => {

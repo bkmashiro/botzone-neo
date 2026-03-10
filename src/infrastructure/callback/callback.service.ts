@@ -65,7 +65,33 @@ export class CallbackService {
     this.logger.error(`结果回调最终失败 (${url}): 已用尽 ${FINISH_MAX_RETRIES} 次重试`);
   }
 
+  /** 防御性 SSRF 检查（补充控制器层验证） */
+  private assertSafeUrl(url: string): void {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error(`回调 URL 无效: ${url}`);
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error(`回调 URL 协议不安全: ${parsed.protocol}`);
+    }
+    const host = parsed.hostname;
+    if (host === 'localhost' || host === '[::1]' || host === '127.0.0.1') {
+      throw new Error(`回调 URL 指向本机: ${host}`);
+    }
+    // 快速检测 IPv4 私有地址
+    const ipv4 = host.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
+    if (ipv4) {
+      const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+      if (a === 10 || a === 127 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) {
+        throw new Error(`回调 URL 指向内网: ${host}`);
+      }
+    }
+  }
+
   private async fetchWithTimeout(url: string, payload: unknown): Promise<Response> {
+    this.assertSafeUrl(url);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), CALLBACK_TIMEOUT_MS);
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };

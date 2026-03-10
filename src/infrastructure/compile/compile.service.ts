@@ -76,9 +76,14 @@ export class CompileService {
         const cached = this.cache.get(hash);
         if (cached) {
           try {
-            const cachedLang = this.languages.get(cached.compiled.language);
-            const sourceFile = path.join(this.cacheDir, hash, `main${cachedLang?.extension ?? ''}`);
-            await fs.access(sourceFile);
+            // 验证运行目标文件仍存在（C++ → 二进制, Python → 源码, TS → 编译后 JS）
+            const cachePrefix = path.resolve(this.cacheDir);
+            const runTarget = path.resolve(cached.compiled.cmd).startsWith(cachePrefix)
+              ? cached.compiled.cmd
+              : cached.compiled.args[0];
+            if (runTarget) {
+              await fs.access(runTarget);
+            }
             cached.lastAccess = Date.now();
             this.cacheHits.inc();
             span.setAttribute('compile.cacheHit', true);

@@ -17,6 +17,7 @@ import { RunMatchUseCase } from '../application/run-match.usecase';
 import { RunOJUseCase } from '../application/run-oj.usecase';
 import { MatchTask } from '../domain/match';
 import { OJTask } from '../domain/oj/testcase';
+import { getRequestId, requestContext } from './request-context';
 
 export const JUDGE_QUEUE = 'judge';
 
@@ -26,6 +27,7 @@ const JOB_TTL_MS = 10 * 60 * 1000;
 interface JudgeJobData {
   type: 'botzone' | 'oj';
   task: MatchTask | OJTask;
+  requestId?: string;
 }
 
 @Injectable()
@@ -41,7 +43,8 @@ export class JudgeQueueService implements OnModuleInit, OnApplicationShutdown {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    const concurrency = parseInt(this.configService.get<string>('JUDGE_CONCURRENCY', '15'), 10);
+    const raw = parseInt(this.configService.get<string>('JUDGE_CONCURRENCY', '15'), 10);
+    const concurrency = Number.isFinite(raw) && raw > 0 ? raw : 15;
     this.judgeQueue.process('run', concurrency, (job: Job<JudgeJobData>) => this.processTask(job));
     this.logger.log(`评测队列已启动，并发数: ${concurrency}`);
   }
@@ -69,6 +72,8 @@ export class JudgeQueueService implements OnModuleInit, OnApplicationShutdown {
   }
 
   async enqueue(data: JudgeJobData): Promise<string> {
+    // 捕获当前请求 ID，以便在队列工作线程中恢复上下文
+    data.requestId = data.requestId ?? getRequestId();
     const job = await this.judgeQueue.add('run', data, {
       removeOnComplete: 100,
       removeOnFail: 200,
@@ -101,24 +106,32 @@ export class JudgeQueueService implements OnModuleInit, OnApplicationShutdown {
   }
 
   private async processTask(job: Job<JudgeJobData>): Promise<unknown> {
-    const { type, task } = job.data;
+    const { type, task, requestId } = job.data;
     this.logger.log(`开始处理评测任务: jobId=${job.id}, type=${type}`);
 
-    try {
-      let result: unknown;
-      if (type === 'botzone') {
-        result = await this.runMatchUseCase.execute(task as MatchTask);
-      } else {
-        result = await this.runOJUseCase.execute(task as OJTask);
+    // 在队列工作线程中恢复请求上下文，使回调能携带 X-Request-ID
+    const run = async () => {
+      try {
+        let result: unknown;
+        if (type === 'botzone') {
+          result = await this.runMatchUseCase.execute(task as MatchTask);
+        } else {
+          result = await this.runOJUseCase.execute(task as OJTask);
+        }
+        this.logger.log(`评测任务完成: jobId=${job.id}`);
+        return result;
+      } catch (err) {
+        this.logger.error(
+          `评测任务失败: jobId=${job.id}, error=${err instanceof Error ? err.message : String(err)}`,
+          err instanceof Error ? err.stack : undefined,
+        );
+        throw err;
       }
-      this.logger.log(`评测任务完成: jobId=${job.id}`);
-      return result;
-    } catch (err) {
-      this.logger.error(
-        `评测任务失败: jobId=${job.id}, error=${err instanceof Error ? err.message : String(err)}`,
-        err instanceof Error ? err.stack : undefined,
-      );
-      throw err;
+    };
+
+    if (requestId) {
+      return requestContext.run({ requestId }, run);
     }
+    return run();
   }
 }

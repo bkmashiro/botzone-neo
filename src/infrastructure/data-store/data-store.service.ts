@@ -93,8 +93,13 @@ export class DataStoreService implements OnModuleInit, OnModuleDestroy {
 
   /** 获取安全的文件路径（防止路径遍历） */
   private safePath(botId: string): string {
+    // 使用 sanitize + hash 后缀防止碰撞（如 "bot_1" vs "bot.1"）
     const sanitized = botId.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const filePath = path.resolve(this.baseDir, `${sanitized}.json`);
+    const suffix =
+      sanitized !== botId
+        ? '-' + crypto.createHash('md5').update(botId).digest('hex').slice(0, 8)
+        : '';
+    const filePath = path.resolve(this.baseDir, `${sanitized}${suffix}.json`);
     if (!filePath.startsWith(path.resolve(this.baseDir))) {
       throw new Error(`非法 botId: ${botId}`);
     }

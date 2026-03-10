@@ -151,6 +151,46 @@ describe('CallbackService (infrastructure)', () => {
     });
   });
 
+  describe('SSRF defense-in-depth', () => {
+    it('should reject localhost callback URL', async () => {
+      jest.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 200 }));
+
+      await service.update('http://localhost:3000/callback', {});
+      // update swallows errors, so it resolves — but fetch should NOT have been called
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('should reject 127.0.0.1 callback URL', async () => {
+      jest.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 200 }));
+
+      await service.update('http://127.0.0.1/callback', {});
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('should reject 10.x.x.x callback URL', async () => {
+      jest.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 200 }));
+
+      await service.update('http://10.0.0.1/callback', {});
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('should reject 192.168.x.x callback URL', async () => {
+      jest.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 200 }));
+
+      await service.update('http://192.168.1.1/callback', {});
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('should allow public URL', async () => {
+      const mockFetch = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(new Response(null, { status: 200 }));
+
+      await service.update('http://api.example.com/callback', {});
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('X-Request-ID forwarding', () => {
     it('should include X-Request-ID header when request context is set', async () => {
       const mockFetch = jest

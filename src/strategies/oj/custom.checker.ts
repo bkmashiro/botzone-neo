@@ -49,9 +49,10 @@ export class CustomChecker implements IChecker {
     ]);
 
     // 以 Codeforces 格式调用 checker: checker input expected actual
+    // 使用相对路径（文件名），因为沙箱 CWD = workDir（nsjail 中为 /workspace）
     const checkerWithArgs: CompiledBot = {
       ...this.compiled,
-      args: [...this.compiled.args, inputFile, expectedFile, actualFile],
+      args: [...this.compiled.args, 'input.txt', 'expected.txt', 'actual.txt'],
     };
 
     const result = await this.sandbox.execute({
