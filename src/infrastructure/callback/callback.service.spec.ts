@@ -1,4 +1,5 @@
 import { CallbackService } from './callback.service';
+import { requestContext } from '../../interface/request-context';
 
 describe('CallbackService (infrastructure)', () => {
   let service: CallbackService;
@@ -104,6 +105,40 @@ describe('CallbackService (infrastructure)', () => {
       await finishPromise;
 
       expect(mockFetch).toHaveBeenCalledTimes(4); // 1 initial + 3 retries
+    });
+  });
+
+  describe('X-Request-ID forwarding', () => {
+    it('should include X-Request-ID header when request context is set', async () => {
+      const mockFetch = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(new Response(null, { status: 200 }));
+
+      await requestContext.run({ requestId: 'test-req-123' }, async () => {
+        await service.update('http://cb.test/update', { data: 'test' });
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://cb.test/update',
+        expect.objectContaining({
+          headers: { 'Content-Type': 'application/json', 'X-Request-ID': 'test-req-123' },
+        }),
+      );
+    });
+
+    it('should not include X-Request-ID header when request context is absent', async () => {
+      const mockFetch = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(new Response(null, { status: 200 }));
+
+      await service.update('http://cb.test/update', { data: 'test' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://cb.test/update',
+        expect.objectContaining({
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
     });
   });
 });
