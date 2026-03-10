@@ -307,4 +307,45 @@ describe('JudgeController', () => {
       await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
     });
   });
+
+  describe('URL validation', () => {
+    it('should reject malformed callback URL in botzone task', async () => {
+      const body = {
+        type: 'botzone',
+        game: {
+          judger: { language: 'cpp', source: 'code', limit: { time: 1000, memory: 256 } },
+        },
+        callback: { update: 'http://update', finish: 'not-a-url' },
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject non-http callback URL in botzone task', async () => {
+      const body = {
+        type: 'botzone',
+        game: {
+          judger: { language: 'cpp', source: 'code', limit: { time: 1000, memory: 256 } },
+        },
+        callback: { update: 'http://update', finish: 'ftp://evil.com/callback' },
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject malformed callback URL in OJ task', async () => {
+      const body = {
+        type: 'oj',
+        source: 'int main() {}',
+        language: 'cpp',
+        timeLimitMs: 1000,
+        memoryLimitMb: 256,
+        testcases: [{ id: 1, input: '1\n', expectedOutput: '1\n' }],
+        callback: { finish: 'not-a-url' },
+        judgeMode: 'standard',
+      };
+
+      await expect(controller.submitTask(body)).rejects.toThrow(BadRequestException);
+    });
+  });
 });
