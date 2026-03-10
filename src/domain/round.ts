@@ -13,6 +13,8 @@ export interface JudgeCommand {
   content: Record<string, string | number>;
   /** 展示信息（前端展示用） */
   display?: unknown;
+  /** 初始数据（仅首轮裁判输出时使用） */
+  initdata?: string | object;
 }
 
 /** 一轮回合的记录 */

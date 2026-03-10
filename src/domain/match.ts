@@ -1,13 +1,12 @@
 /**
- * Match 领域对象
+ * Match 生命周期
  *
  * 纯领域对象，零依赖。
- * 表示一局 Botzone 评测的完整生命周期。
+ * 管理对局的状态机：轮次计数、日志收集、结果生成。
  */
 
 import { Verdict } from './verdict';
 import { BotSpec } from './bot';
-import { RoundRecord } from './round';
 
 /** 评测任务类型 */
 export type TaskType = 'botzone' | 'oj';
@@ -47,11 +46,62 @@ export interface CompileSummary {
 export interface MatchResult {
   /** 各参与者分数 */
   scores: Record<string, number>;
-  /** 对局回合记录 */
-  log: RoundRecord[];
+  /** 对局日志 */
+  log: unknown[];
   /** 编译结果汇总 */
   compiles: CompileSummary[];
 }
 
 /** 最大对局轮数（安全上限） */
 export const MAX_ROUNDS = 1000;
+
+/**
+ * Match 聚合根
+ *
+ * 负责对局的轮次推进、日志收集和结果生成。
+ * 不涉及 I/O，纯状态管理。
+ */
+export class Match {
+  private round = 0;
+  private readonly log: unknown[] = [];
+  private _finished = false;
+
+  constructor(
+    readonly task: MatchTask,
+    readonly maxRounds: number = MAX_ROUNDS,
+  ) {}
+
+  get currentRound(): number {
+    return this.round;
+  }
+
+  get isFinished(): boolean {
+    return this._finished;
+  }
+
+  get hasRoundsLeft(): boolean {
+    return this.round < this.maxRounds;
+  }
+
+  /** 推进到下一轮，返回新的轮次编号 */
+  nextRound(): number {
+    if (!this.hasRoundsLeft) {
+      throw new Error('超过最大轮次限制');
+    }
+    return ++this.round;
+  }
+
+  /** 记录日志 */
+  addLog(entry: unknown): void {
+    this.log.push(entry);
+  }
+
+  /** 结束对局，返回最终结果 */
+  finish(
+    scores: Record<string, number>,
+    compiles: CompileSummary[],
+  ): MatchResult {
+    this._finished = true;
+    return { scores, log: [...this.log], compiles };
+  }
+}
