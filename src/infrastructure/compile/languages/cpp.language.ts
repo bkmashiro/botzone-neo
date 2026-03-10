@@ -8,21 +8,22 @@ export class CppLanguage implements ILanguage {
   readonly extension = '.cpp';
   readonly needsCompilation = true;
 
-  getCompileCommand(sourcePath: string, outputPath: string) {
+  getCompileCommand(sourcePath: string, outputPath: string): { cmd: string; args: string[] } {
     return {
       cmd: 'g++',
       args: [
         '-O2',
         '-std=c++17',
         '-DONLINE_JUDGE',
-        '-o', outputPath,
+        '-o',
+        outputPath,
         sourcePath,
-        '-I/usr/local/include',  // nlohmann/json 头文件路径
+        '-I/usr/local/include', // nlohmann/json 头文件路径
       ],
     };
   }
 
-  getRunCommand(_sourcePath: string, outputPath: string) {
+  getRunCommand(_sourcePath: string, outputPath: string): { cmd: string; args: string[] } {
     return { cmd: outputPath, args: [] };
   }
 

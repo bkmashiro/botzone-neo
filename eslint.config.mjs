@@ -45,4 +45,13 @@ export default tseslint.config(
       '@typescript-eslint/no-non-null-assertion': 'warn',
     },
   },
+  // 测试文件放宽规则
+  {
+    files: ['**/*.spec.ts', '**/*.test.ts', '**/test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      '@typescript-eslint/explicit-module-boundary-types': 'off',
+    },
+  },
 );

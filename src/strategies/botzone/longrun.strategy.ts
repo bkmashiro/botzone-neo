@@ -40,7 +40,7 @@ export class LongrunStrategy implements IBotRunStrategy {
 
       // 收集一行 stdout 输出（限制缓冲区大小）
       let buffer = '';
-      const onData = (chunk: Buffer) => {
+      const onData = (chunk: Buffer): void => {
         buffer += chunk.toString();
         if (buffer.length > MAX_BUFFER_SIZE) {
           clearTimeout(timeoutHandle);
@@ -58,10 +58,10 @@ export class LongrunStrategy implements IBotRunStrategy {
         }
       };
 
-      this.child!.stdout!.on('data', onData);
+      this.child?.stdout?.on('data', onData);
 
       // 进程已退出则立即返回错误
-      if (this.exited) {
+      if (this.exited || !this.child) {
         clearTimeout(timeoutHandle);
         this.child?.stdout?.off('data', onData);
         resolve({ response: '', debug: '进程已退出' });
@@ -70,7 +70,7 @@ export class LongrunStrategy implements IBotRunStrategy {
 
       // 写入本轮输入
       try {
-        this.child!.stdin!.write(inputLine);
+        this.child?.stdin?.write(inputLine);
       } catch {
         clearTimeout(timeoutHandle);
         this.child?.stdout?.off('data', onData);
@@ -109,7 +109,7 @@ export class LongrunStrategy implements IBotRunStrategy {
       this.logger.error(`Bot ${bot.id} 启动失败: ${err.message}`);
     });
 
-    this.child.stdin!.on('error', (err: NodeJS.ErrnoException) => {
+    this.child.stdin?.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'EPIPE') return;
       this.exited = true;
       this.logger.error(`Bot ${bot.id} stdin 错误: ${err.message}`);

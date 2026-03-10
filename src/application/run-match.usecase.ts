@@ -174,7 +174,8 @@ export class RunMatchUseCase {
         break;
       }
 
-      const judgerHistory = histories.get('judger')!;
+      const judgerHistory = histories.get('judger');
+      if (!judgerHistory) break;
       if (round === 1) {
         judgerHistory.requests.push(initdata);
       }
@@ -219,8 +220,9 @@ export class RunMatchUseCase {
 
       const botResults = await Promise.all(
         botEntries.map(async ([botId, request]) => {
-          const bot = bots.get(botId)!;
-          const history = histories.get(botId)!;
+          const bot = bots.get(botId);
+          const history = histories.get(botId);
+          if (!bot || !history) return [botId, ''] as const;
           history.requests.push(String(request));
 
           const botInput = await this.buildBotInput(bot, history, session);
