@@ -73,12 +73,15 @@ int main() {
     // 调用决策函数
     string myResponse = makeDecision(currentRequest, requests, responses, data);
 
+    // 持久化数据示例：记录总轮次
+    int turnCount = data.empty() ? 1 : stoi(data) + 1;
+
     // 构造输出 JSON
     json output;
-    output["response"] = myResponse;                 // 必填：本轮回复
-    output["debug"] = "turn " + to_string(responses.size() + 1);  // 可选：调试信息
-    // output["data"] = "保存的状态";                 // 可选：本局持久化（下轮通过 data 字段传回）
-    // output["globaldata"] = "全局状态";             // 可选：跨对局持久化
+    output["response"] = myResponse;                           // 必填：本轮回复
+    output["debug"] = "turn " + to_string(turnCount);          // 可选：调试信息
+    output["data"] = to_string(turnCount);                     // 可选：本局持久化（下轮通过 data 字段传回）
+    // output["globaldata"] = "全局状态";                       // 可选：跨对局持久化
 
     cout << output.dump() << endl;
     return 0;
