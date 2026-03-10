@@ -23,14 +23,17 @@ RUN git clone --depth 1 --branch 3.4 https://github.com/google/nsjail.git /tmp/n
     && cp /tmp/nsjail/nsjail /usr/bin/nsjail \
     && rm -rf /tmp/nsjail
 
+# 安装 pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
 # 安装 Node.js 依赖
-COPY package.json package-lock.json* ./
-RUN npm ci --production=false
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 # 复制源码并构建
 COPY tsconfig.json nest-cli.json* ./
 COPY src/ ./src/
-RUN npm run build
+RUN pnpm run build
 
 # ============================================================
 # Stage 2: Runtime — 仅包含必要运行时

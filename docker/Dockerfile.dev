@@ -36,5 +36,8 @@ RUN mkdir -p /usr/local/include/nlohmann \
 # 安装全局 TypeScript
 RUN npm install -g typescript
 
+# 安装 pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
 # 挂载源码（通过 docker-compose volumes）
-CMD ["npm", "run", "start:dev"]
+CMD ["pnpm", "run", "start:dev"]
