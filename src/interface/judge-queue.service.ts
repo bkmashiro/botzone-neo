@@ -56,6 +56,25 @@ export class JudgeQueueService implements OnModuleInit {
     return String(job.id);
   }
 
+  async getJobStatus(jobId: string): Promise<{
+    jobId: string;
+    state: string;
+    type?: string;
+    finishedOn?: string;
+    failedReason?: string;
+  } | null> {
+    const job = await this.judgeQueue.getJob(jobId);
+    if (!job) return null;
+    const state = await job.getState();
+    return {
+      jobId: String(job.id),
+      state,
+      type: (job.data as JudgeJobData)?.type,
+      ...(job.finishedOn ? { finishedOn: new Date(job.finishedOn).toISOString() } : {}),
+      ...(job.failedReason ? { failedReason: job.failedReason } : {}),
+    };
+  }
+
   private async processTask(job: Job<JudgeJobData>): Promise<void> {
     const { type, task } = job.data;
     this.logger.log(`开始处理评测任务: jobId=${job.id}, type=${type}`);

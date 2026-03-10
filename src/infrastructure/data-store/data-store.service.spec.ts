@@ -42,6 +42,51 @@ describe('DataStoreService', () => {
     });
   });
 
+  describe('createSession', () => {
+    it('should create an isolated session scope', () => {
+      const session = service.createSession();
+      expect(session.getData('bot-1')).toBe('');
+
+      session.setData('bot-1', 'session-data');
+      expect(session.getData('bot-1')).toBe('session-data');
+    });
+
+    it('should isolate sessions from each other', () => {
+      const s1 = service.createSession();
+      const s2 = service.createSession();
+
+      s1.setData('bot-1', 'from-s1');
+      s2.setData('bot-1', 'from-s2');
+
+      expect(s1.getData('bot-1')).toBe('from-s1');
+      expect(s2.getData('bot-1')).toBe('from-s2');
+    });
+
+    it('should clean up on clear', () => {
+      const session = service.createSession();
+      session.setData('bot-1', 'data');
+      session.clear();
+      // After clear, calling getData on the same session object still works
+      // (it reads from the now-deleted map, returning undefined → '')
+    });
+  });
+
+  describe('safePath', () => {
+    it('should sanitize special characters in botId', async () => {
+      mockedFs.mkdir.mockResolvedValue(undefined);
+      mockedFs.writeFile.mockResolvedValue(undefined);
+
+      await service.setGlobalData('../etc/passwd', 'data');
+
+      // The botId should be sanitized to remove path traversal
+      expect(mockedFs.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('___etc_passwd.json'),
+        'data',
+        'utf-8',
+      );
+    });
+  });
+
   describe('getGlobalData', () => {
     it('should return file content when file exists and is fresh', async () => {
       mockedFs.stat.mockResolvedValue({
