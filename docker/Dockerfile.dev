@@ -21,8 +21,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 编译安装 nsjail
-RUN git clone --depth 1 https://github.com/google/nsjail.git /tmp/nsjail \
+# 编译安装 nsjail（pin 到稳定版本）
+RUN git clone --depth 1 --branch 3.4 https://github.com/google/nsjail.git /tmp/nsjail \
     && cd /tmp/nsjail \
     && make -j$(nproc) \
     && cp /tmp/nsjail/nsjail /usr/bin/nsjail \
@@ -33,11 +33,11 @@ RUN mkdir -p /usr/local/include/nlohmann \
     && curl -sL https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp \
        -o /usr/local/include/nlohmann/json.hpp
 
-# 安装全局 TypeScript
-RUN npm install -g typescript
+# 安装全局 TypeScript（pin 到与项目一致的版本）
+RUN npm install -g typescript@5.9.3
 
-# 安装 pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# 安装 pnpm（pin 到与项目一致的版本）
+RUN corepack enable && corepack prepare pnpm@10.30.3 --activate
 
 # 挂载源码（通过 docker-compose volumes）
 CMD ["pnpm", "run", "start:dev"]
