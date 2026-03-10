@@ -5,6 +5,8 @@
  * 描述 OJ 评测中的一个测试用例。
  */
 
+import { Verdict } from '../verdict';
+
 /** 单个测试用例 */
 export interface Testcase {
   /** 用例编号（从 1 开始） */
@@ -49,7 +51,7 @@ export interface TestcaseResult {
   /** 用例编号 */
   id: number;
   /** 评测结果 */
-  verdict: string;
+  verdict: Verdict;
   /** 实际输出 */
   actualOutput?: string;
   /** 用时（毫秒） */
@@ -63,9 +65,9 @@ export interface TestcaseResult {
 /** OJ 评测最终结果 */
 export interface OJResult {
   /** 总体评测结果 */
-  verdict: string;
+  verdict: Verdict;
   /** 各用例的结果 */
   testcases: TestcaseResult[];
   /** 编译信息 */
-  compile: { verdict: string; message?: string };
+  compile: { verdict: Verdict; message?: string };
 }

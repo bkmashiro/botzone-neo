@@ -40,14 +40,11 @@ describe('Match', () => {
     match.nextRound();
     match.addLog({ round: 1, data: 'test' });
 
-    const result = match.finish(
-      { '0': 1, '1': 0 },
-      [
-        { botId: 'judger', verdict: Verdict.OK },
-        { botId: '0', verdict: Verdict.OK },
-        { botId: '1', verdict: Verdict.OK },
-      ],
-    );
+    const result = match.finish({ '0': 1, '1': 0 }, [
+      { botId: 'judger', verdict: Verdict.OK },
+      { botId: '0', verdict: Verdict.OK },
+      { botId: '1', verdict: Verdict.OK },
+    ]);
 
     expect(result.scores).toEqual({ '0': 1, '1': 0 });
     expect(result.log).toHaveLength(1);
@@ -76,6 +73,15 @@ describe('Match', () => {
     match.finish({ '0': 0 }, []);
 
     expect(() => match.nextRound()).toThrow('对局已结束');
+  });
+
+  it('可以从 PENDING 直接结束（编译失败场景）', () => {
+    const match = new Match(makeTask());
+    expect(match.state).toBe(MatchState.PENDING);
+
+    const result = match.finish({ '0': 0, '1': 1 }, []);
+    expect(match.state).toBe(MatchState.FINISHED);
+    expect(result.scores).toEqual({ '0': 0, '1': 1 });
   });
 
   it('不能重复结束对局', () => {

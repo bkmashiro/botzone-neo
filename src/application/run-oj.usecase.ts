@@ -138,7 +138,21 @@ export class RunOJUseCase {
           continue;
         }
 
-        const checkResult = await checker.check(tc.input, tc.expectedOutput, sandboxResult.stdout);
+        let checkResult;
+        try {
+          checkResult = await checker.check(tc.input, tc.expectedOutput, sandboxResult.stdout);
+        } catch (checkerErr) {
+          this.logger.error(`Checker 执行异常: ${checkerErr}`);
+          testcaseResults.push({
+            id: tc.id,
+            verdict: Verdict.SE,
+            timeMs,
+            memoryKb,
+            message: `Checker error: ${checkerErr instanceof Error ? checkerErr.message : String(checkerErr)}`,
+          });
+          if (overallVerdict === Verdict.AC) overallVerdict = Verdict.SE;
+          continue;
+        }
 
         testcaseResults.push({
           id: tc.id,

@@ -524,6 +524,44 @@ describe('RunOJUseCase', () => {
     await expect(useCase.execute(task)).rejects.toThrow('disk full');
   });
 
+  it('should report SE when checker.check throws unexpectedly', async () => {
+    const checkerCompiled: CompiledBot = {
+      cmd: './checker',
+      args: [],
+      language: 'cpp',
+      readonlyMounts: [],
+    };
+
+    mockCompileService.compile
+      .mockResolvedValueOnce(compiledBot)
+      .mockResolvedValueOnce(checkerCompiled);
+
+    // User code runs fine
+    mockSandbox.execute.mockResolvedValueOnce({
+      stdout: '42\n',
+      stderr: '',
+      exitCode: 0,
+      timedOut: false,
+      memoryKb: 1024,
+    });
+    // Checker sandbox throws (e.g., disk full)
+    mockSandbox.execute.mockRejectedValueOnce(new Error('ENOSPC: no space left on device'));
+
+    const task = makeTask({
+      judgeMode: 'checker',
+      checkerLanguage: 'cpp',
+      checkerSource: 'checker code',
+      testcases: [{ id: 1, input: '1\n', expectedOutput: '42\n' }],
+    });
+
+    await useCase.execute(task);
+
+    const result: OJResult = mockCallbackService.finish.mock.calls[0][1];
+    expect(result.verdict).toBe(Verdict.SE);
+    expect(result.testcases[0].verdict).toBe(Verdict.SE);
+    expect(result.testcases[0].message).toContain('ENOSPC');
+  });
+
   it('should not throw when temp dir cleanup fails', async () => {
     (fs.rm as jest.Mock).mockRejectedValue(new Error('ENOENT'));
     const task = makeTask();
