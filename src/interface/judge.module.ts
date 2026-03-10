@@ -8,9 +8,11 @@
 
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { BullModule } from '@nestjs/bull';
 
 // Interface
 import { JudgeController } from './judge.controller';
+import { JudgeQueueService, JUDGE_QUEUE } from './judge-queue.service';
 
 // Application
 import { RunMatchUseCase } from '../application/run-match.usecase';
@@ -25,9 +27,12 @@ import { DirectSandbox } from '../infrastructure/sandbox/direct.sandbox';
 import { NsjailSandbox } from '../infrastructure/sandbox/nsjail.sandbox';
 
 @Module({
-  imports: [ConfigModule],
+  imports: [ConfigModule, BullModule.registerQueue({ name: JUDGE_QUEUE })],
   controllers: [JudgeController],
   providers: [
+    // 队列服务
+    JudgeQueueService,
+
     // 用例层
     RunMatchUseCase,
     RunOJUseCase,
