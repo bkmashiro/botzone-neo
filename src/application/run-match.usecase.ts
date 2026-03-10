@@ -74,6 +74,10 @@ export class RunMatchUseCase {
       );
     });
 
+    this.activeMatches.inc();
+    const startTime = Date.now();
+    let verdict = Verdict.OK;
+
     try {
       await Promise.race([
         this.executeInner(task, match, workDir, strategy, bots, histories, compiles, session),
@@ -82,6 +86,7 @@ export class RunMatchUseCase {
     } catch (err) {
       if (err instanceof MatchTimeoutError) {
         this.logger.error(err.message);
+        verdict = Verdict.TLE;
         // 超时：所有玩家得 0 分，verdict = SE
         if (!match.isFinished) {
           const scores: Record<string, number> = {};
@@ -92,9 +97,13 @@ export class RunMatchUseCase {
           await this.callbackService.finish(task.callback.finish, result);
         }
       } else {
+        verdict = Verdict.SE;
         throw err;
       }
     } finally {
+      this.activeMatches.dec();
+      this.judgeRequestsTotal.inc({ type: 'botzone', verdict });
+      this.judgeDurationMs.observe({ type: 'botzone' }, Date.now() - startTime);
       clearTimeout(timeoutHandle);
       for (const bot of bots.values()) {
         await strategy.cleanup(bot);

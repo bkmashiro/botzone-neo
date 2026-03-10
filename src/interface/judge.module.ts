@@ -9,6 +9,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bull';
+import {
+  PrometheusModule,
+  makeCounterProvider,
+  makeHistogramProvider,
+  makeGaugeProvider,
+} from '@willsoto/nestjs-prometheus';
 
 // Interface
 import { JudgeController } from './judge.controller';
@@ -27,7 +33,11 @@ import { DirectSandbox } from '../infrastructure/sandbox/direct.sandbox';
 import { NsjailSandbox } from '../infrastructure/sandbox/nsjail.sandbox';
 
 @Module({
-  imports: [ConfigModule, BullModule.registerQueue({ name: JUDGE_QUEUE })],
+  imports: [
+    ConfigModule,
+    BullModule.registerQueue({ name: JUDGE_QUEUE }),
+    PrometheusModule.register(),
+  ],
   controllers: [JudgeController],
   providers: [
     // 队列服务
@@ -41,6 +51,31 @@ import { NsjailSandbox } from '../infrastructure/sandbox/nsjail.sandbox';
     CompileService,
     CallbackService,
     DataStoreService,
+
+    // Prometheus 指标
+    makeCounterProvider({
+      name: 'botzone_judge_requests_total',
+      help: 'Total judge requests',
+      labelNames: ['type', 'verdict'],
+    }),
+    makeHistogramProvider({
+      name: 'botzone_judge_duration_ms',
+      help: 'Judge request duration in milliseconds',
+      labelNames: ['type'],
+      buckets: [500, 1000, 3000, 10000, 30000],
+    }),
+    makeGaugeProvider({
+      name: 'botzone_active_matches',
+      help: 'Number of currently active matches',
+    }),
+    makeCounterProvider({
+      name: 'botzone_compile_cache_hits_total',
+      help: 'Compile cache hits',
+    }),
+    makeCounterProvider({
+      name: 'botzone_compile_cache_misses_total',
+      help: 'Compile cache misses',
+    }),
 
     // 沙箱：根据环境变量选择实现
     {
