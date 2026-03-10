@@ -5,9 +5,11 @@
  */
 
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import { Counter, Gauge, Histogram } from 'prom-client';
 
 import { Verdict, CompileError } from '../domain/verdict';
 import { OJTask, TestcaseResult, OJResult } from '../domain/oj/testcase';
@@ -28,10 +30,17 @@ export class RunOJUseCase {
     private readonly compileService: CompileService,
     private readonly callbackService: CallbackService,
     @Inject(SANDBOX_TOKEN) private readonly sandbox: ISandbox,
+    @InjectMetric('botzone_judge_requests_total') private readonly judgeRequestsTotal: Counter,
+    @InjectMetric('botzone_judge_duration_ms') private readonly judgeDurationMs: Histogram,
+    @InjectMetric('botzone_active_matches') private readonly activeMatches: Gauge,
   ) {}
 
   async execute(task: OJTask): Promise<void> {
     const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'oj-'));
+
+    this.activeMatches.inc();
+    const startTime = Date.now();
+    let verdict = Verdict.AC;
 
     try {
       // ── 编译用户代码 ──
@@ -40,6 +49,7 @@ export class RunOJUseCase {
         compiled = await this.compileService.compile(task.language, task.source);
       } catch (err) {
         if (err instanceof CompileError) {
+          verdict = Verdict.CE;
           const result: OJResult = {
             verdict: Verdict.CE,
             testcases: [],
@@ -127,6 +137,7 @@ export class RunOJUseCase {
         }
       }
 
+      verdict = overallVerdict;
       const result: OJResult = {
         verdict: overallVerdict,
         testcases: testcaseResults,
@@ -134,6 +145,9 @@ export class RunOJUseCase {
       };
       await this.callbackService.finish(task.callback.finish, result);
     } finally {
+      this.activeMatches.dec();
+      this.judgeRequestsTotal.inc({ type: 'oj', verdict });
+      this.judgeDurationMs.observe({ type: 'oj' }, Date.now() - startTime);
       await fs.rm(workDir, { recursive: true, force: true }).catch((err) => {
         this.logger.warn(`临时目录清理失败: ${workDir}: ${err}`);
       });
