@@ -10,7 +10,7 @@
  */
 
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { InjectQueue, Process, Processor } from '@nestjs/bull';
+import { InjectQueue, Processor } from '@nestjs/bull';
 import { ConfigService } from '@nestjs/config';
 import { Job, Queue } from 'bull';
 import { RunMatchUseCase } from '../application/run-match.usecase';
@@ -40,8 +40,9 @@ export class JudgeQueueService implements OnModuleInit {
     private readonly configService: ConfigService,
   ) {}
 
-  onModuleInit() {
+  async onModuleInit(): Promise<void> {
     const concurrency = this.configService.get<number>('JUDGE_CONCURRENCY', 15);
+    this.judgeQueue.process('run', concurrency, (job: Job<JudgeJobData>) => this.processTask(job));
     this.logger.log(`评测队列已启动，并发数: ${concurrency}`);
   }
 
@@ -55,8 +56,7 @@ export class JudgeQueueService implements OnModuleInit {
     return String(job.id);
   }
 
-  @Process({ name: 'run', concurrency: 15 })
-  async processTask(job: Job<JudgeJobData>): Promise<void> {
+  private async processTask(job: Job<JudgeJobData>): Promise<void> {
     const { type, task } = job.data;
     this.logger.log(`开始处理评测任务: jobId=${job.id}, type=${type}`);
 

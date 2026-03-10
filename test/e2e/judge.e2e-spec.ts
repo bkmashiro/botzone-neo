@@ -17,13 +17,21 @@ describe('Judge API E2E', () => {
   let app: INestApplication;
   let mockEnqueue: jest.Mock;
 
+  const mockQueue = {
+    client: { ping: jest.fn().mockResolvedValue('PONG') },
+    add: jest.fn(),
+  };
+
   beforeEach(async () => {
     mockEnqueue = jest.fn().mockResolvedValue('test-job-1');
 
     const moduleRef = await Test.createTestingModule({
       imports: [ConfigModule.forRoot({ isGlobal: true })],
       controllers: [JudgeController, HealthController],
-      providers: [{ provide: JudgeQueueService, useValue: { enqueue: mockEnqueue } }],
+      providers: [
+        { provide: JudgeQueueService, useValue: { enqueue: mockEnqueue } },
+        { provide: 'BullQueue_judge', useValue: mockQueue },
+      ],
     }).compile();
 
     app = moduleRef.createNestApplication();
@@ -43,9 +51,20 @@ describe('Judge API E2E', () => {
 
   // ── 健康检查 ──
 
-  it('GET /health → 200 + status:"ok"', async () => {
+  it('GET /health → 200 + 组件状态 + 版本 + uptime', async () => {
     const res = await request(app.getHttpServer()).get('/health').expect(200);
-    expect(res.body).toEqual({ status: 'ok' });
+    expect(res.body.status).toBe('ok');
+    expect(res.body.version).toBe('1.0.0');
+    expect(typeof res.body.uptime).toBe('number');
+    expect(res.body.components.redis.status).toBe('ok');
+    expect(res.body.components.disk.status).toBe('ok');
+  });
+
+  it('GET /health → Redis 异常时 status=degraded', async () => {
+    mockQueue.client.ping.mockRejectedValueOnce(new Error('Connection refused'));
+    const res = await request(app.getHttpServer()).get('/health').expect(200);
+    expect(res.body.status).toBe('degraded');
+    expect(res.body.components.redis.status).toBe('error');
   });
 
   // ── Botzone 合法任务 ──

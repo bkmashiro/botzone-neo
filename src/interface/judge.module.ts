@@ -18,6 +18,7 @@ import {
 
 // Interface
 import { JudgeController } from './judge.controller';
+import { HealthController } from './health.controller';
 import { JudgeQueueService, JUDGE_QUEUE } from './judge-queue.service';
 
 // Application
@@ -38,7 +39,7 @@ import { NsjailSandbox } from '../infrastructure/sandbox/nsjail.sandbox';
     BullModule.registerQueue({ name: JUDGE_QUEUE }),
     PrometheusModule.register(),
   ],
-  controllers: [JudgeController],
+  controllers: [JudgeController, HealthController],
   providers: [
     // 队列服务
     JudgeQueueService,

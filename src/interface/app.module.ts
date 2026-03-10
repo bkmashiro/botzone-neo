@@ -8,7 +8,6 @@ import { BullModule } from '@nestjs/bull';
 import { LoggerModule } from 'nestjs-pino';
 import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import { JudgeModule } from './judge.module';
-import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -43,6 +42,5 @@ import { HealthController } from './health.controller';
     // 评测模块
     JudgeModule,
   ],
-  controllers: [HealthController],
 })
 export class AppModule {}
