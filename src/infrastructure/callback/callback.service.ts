@@ -79,6 +79,7 @@ export class CallbackService {
         headers,
         body: JSON.stringify(payload),
         signal: controller.signal,
+        redirect: 'error', // 禁止跟随重定向，防止 SSRF 绕过
       });
     } finally {
       clearTimeout(timeout);

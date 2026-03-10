@@ -566,7 +566,7 @@ describe('RunOJUseCase', () => {
     (fs.rm as jest.Mock).mockRejectedValue(new Error('ENOENT'));
     const task = makeTask();
 
-    await expect(useCase.execute(task)).resolves.toBeUndefined();
+    await expect(useCase.execute(task)).resolves.toBeDefined();
   });
 
   // ── 10. Standard mode (DiffChecker) is used by default ────

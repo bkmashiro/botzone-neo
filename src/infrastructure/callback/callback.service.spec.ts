@@ -134,6 +134,23 @@ describe('CallbackService (infrastructure)', () => {
     });
   });
 
+  describe('redirect protection', () => {
+    it('should pass redirect: error to prevent SSRF via redirect', async () => {
+      const mockFetch = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(new Response(null, { status: 200 }));
+
+      await service.update('http://cb.test/update', { data: 'test' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://cb.test/update',
+        expect.objectContaining({
+          redirect: 'error',
+        }),
+      );
+    });
+  });
+
   describe('X-Request-ID forwarding', () => {
     it('should include X-Request-ID header when request context is set', async () => {
       const mockFetch = jest
