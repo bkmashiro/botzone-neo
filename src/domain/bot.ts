@@ -93,8 +93,10 @@ export interface BotInput {
 export interface BotOutput {
   /** 本轮响应 */
   response: string;
-  /** 调试信息 */
+  /** 调试信息（来自 JSON 的 debug 字段） */
   debug?: string;
+  /** 进程 stderr 输出 */
+  stderr?: string;
   /** 本局持久化数据（更新） */
   data?: string;
   /** 全局持久化数据（更新） */

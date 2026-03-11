@@ -62,7 +62,9 @@ export class RestartStrategy implements IBotRunStrategy {
     this.logger.debug(
       `Bot ${bot.id} stdout=${JSON.stringify(result.stdout?.slice(0, 100))} stderr=${result.stderr?.slice(0, 50)}`,
     );
-    return this.parseOutput(result.stdout);
+    const parsed = this.parseOutput(result.stdout);
+    if (result.stderr?.trim()) parsed.stderr = result.stderr;
+    return parsed;
   }
 
   /** 解析 Bot 输出：支持 JSON 模式和简化交互模式 */
