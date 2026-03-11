@@ -25,6 +25,54 @@ export class RestartStrategy implements IBotRunStrategy {
 
   constructor(private readonly sandbox: ISandbox) {}
 
+  /**
+   * user-judge protocol: send raw stdin string to bot, read one-line response.
+   * Used by executeWithUserJudge — each round the bot receives just the current
+   * command JSON from the judge, not the full history.
+   */
+  async runRoundRaw(bot: BotRuntime, stdin: string): Promise<BotOutput> {
+    if (bot.runnerType === 'webhook' && bot.externalUrl) {
+      // For webhook bots in user-judge mode we still pass a minimal BotInput
+      return this.webhookRunner.run(
+        bot.id,
+        bot.externalUrl,
+        {
+          requests: [stdin],
+          responses: [],
+          data: '',
+          globaldata: '',
+          time_limit: bot.limit.timeMs / 1000,
+          memory_limit: bot.limit.memoryMb,
+        },
+        bot.webhookTimeoutMs,
+      );
+    }
+
+    const result = await this.sandbox.execute({
+      compiled: bot.compiled,
+      workDir: bot.workDir,
+      limit: bot.limit,
+      stdin,
+    });
+
+    if (result.timedOut) {
+      return { response: '', debug: `TLE: 超过时间限制 ${bot.limit.timeMs}ms` };
+    }
+    if (result.exitCode !== 0) {
+      this.logger.error(
+        `Bot ${bot.id} 非零退出: code=${result.exitCode} stderr=${result.stderr?.slice(0, 200)}`,
+      );
+      return { response: '', debug: result.stderr || `进程异常退出 (code=${result.exitCode})` };
+    }
+
+    this.logger.debug(
+      `Bot ${bot.id} stdout=${JSON.stringify(result.stdout?.slice(0, 100))} stderr=${result.stderr?.slice(0, 50)}`,
+    );
+    const parsed = this.parseOutput(result.stdout);
+    if (result.stderr?.trim()) parsed.stderr = result.stderr;
+    return parsed;
+  }
+
   async runRound(bot: BotRuntime, input: BotInput): Promise<BotOutput> {
     // Webhook bot: delegate to HTTP runner instead of sandbox
     if (bot.runnerType === 'webhook' && bot.externalUrl) {

@@ -22,6 +22,18 @@ export class LongrunStrategy implements IBotRunStrategy {
   private child: ChildProcess | null = null;
   private exited = false;
 
+  async runRoundRaw(bot: BotRuntime, stdin: string): Promise<BotOutput> {
+    // For longrun bots in user-judge mode, send raw stdin directly
+    return this.runRound(bot, {
+      requests: [stdin],
+      responses: [],
+      data: '',
+      globaldata: '',
+      time_limit: bot.limit.timeMs / 1000,
+      memory_limit: bot.limit.memoryMb,
+    });
+  }
+
   async runRound(bot: BotRuntime, input: BotInput): Promise<BotOutput> {
     if (!this.child) {
       this.spawnProcess(bot);

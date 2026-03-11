@@ -384,18 +384,32 @@ export class JudgeController {
       throw new BadRequestException(`runMode 必须为 restart 或 longrun`);
     }
 
-    const bots: BotSpec[] = Object.entries(game).map(([id, code]) => ({
-      id,
-      language: code.language,
-      source: code.source ?? '',
-      limit: {
-        timeMs: code.limit.time,
-        memoryMb: code.limit.memory,
-      },
-      runnerType: code.runnerType ?? 'code',
-      externalUrl: code.externalUrl,
-      webhookTimeoutMs: code.webhookTimeoutMs,
-    }));
+    const bots: BotSpec[] = [];
+    let judger: MatchTask['judger'] | undefined;
+
+    for (const [id, code] of Object.entries(game)) {
+      if (id === 'judger' && code.source) {
+        // Extract judger as a JudgerSpec so the new user-judge protocol is used
+        judger = {
+          source: code.source, // source arrives as plain text from the backend
+          language: code.language,
+          timeLimitMs: code.limit.time,
+        };
+      } else {
+        bots.push({
+          id,
+          language: code.language,
+          source: code.source ?? '',
+          limit: {
+            timeMs: code.limit.time,
+            memoryMb: code.limit.memory,
+          },
+          runnerType: code.runnerType ?? 'code',
+          externalUrl: code.externalUrl,
+          webhookTimeoutMs: code.webhookTimeoutMs,
+        });
+      }
+    }
 
     return {
       type: 'botzone',
@@ -403,6 +417,7 @@ export class JudgeController {
       callback,
       initdata: typeof initdata === 'object' ? JSON.stringify(initdata) : initdata,
       runMode: runMode as 'restart' | 'longrun',
+      judger,
     };
   }
 }

@@ -532,12 +532,12 @@ export class RunMatchUseCase {
           if (!bot || !history)
             return { botId, move: null as unknown, debug: undefined, stderr: undefined };
 
-          // The judge command for this bot becomes the next request in its history
+          // user-judge protocol: send just the current round command to the bot
+          // (not the full history – bots read one JSON line per round)
           const requestStr = typeof command === 'string' ? command : JSON.stringify(command);
           history.requests.push(requestStr);
 
-          const botInput = await this.buildBotInput(bot, history, session);
-          const output: BotOutput = await botRunStrategy.runRound(bot, botInput);
+          const output: BotOutput = await botRunStrategy.runRoundRaw(bot, requestStr);
           await botRunStrategy.afterRound(bot);
           await this.updatePersistentData(botId, output, session);
 

@@ -9,8 +9,14 @@
 import { BotRuntime, BotInput, BotOutput } from '../domain/bot';
 
 export interface IBotRunStrategy {
-  /** 执行一轮 Bot 运行 */
+  /** 执行一轮 Bot 运行（legacy: 全历史 BotInput JSON 作为 stdin） */
   runRound(bot: BotRuntime, input: BotInput): Promise<BotOutput>;
+
+  /**
+   * 执行一轮 Bot 运行（user-judge 协议：直接以 stdin 字符串驱动，不包装历史）
+   * 用于 executeWithUserJudge：每轮只把当前回合命令发给 bot，bot 读一行输出一行。
+   */
+  runRoundRaw(bot: BotRuntime, stdin: string): Promise<BotOutput>;
 
   /** 单轮结束后的清理 */
   afterRound(bot: BotRuntime): Promise<void>;
