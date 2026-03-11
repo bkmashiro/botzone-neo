@@ -286,12 +286,12 @@ export class RunMatchUseCase {
 
           await this.updatePersistentData(botId, output, session);
           history.responses.push(output.response);
-          return [botId, output.response] as const;
+          return [botId, output.response, output.debug ?? null] as const;
         }),
       );
 
       // Forfeit: if any bot returned empty response, mark game as error (no ELO change)
-      const forfeitedBot = botResults.find(([, response]) => !response);
+      const forfeitedBot = botResults.find(([, response]) => !response as unknown as boolean);
       if (forfeitedBot) {
         const forfeitedId = forfeitedBot[0];
         this.logger.warn(`Bot ${forfeitedId} 无响应，判定弃权（游戏作废，不计分）`);
@@ -313,7 +313,9 @@ export class RunMatchUseCase {
       // so the judger receives {"0": 8} instead of {"0": "{\"0\":8}"}.
       const botResponses: Record<string, unknown> = {};
       const roundDebugLegacy: Record<string, string | null> = {};
-      for (const [botId, response] of botResults) {
+      for (const [botId, response, stderr] of botResults) {
+        // Collect stderr regardless of JSON format
+        if (stderr) roundDebugLegacy[`bot_${botId}_stderr`] = stderr;
         try {
           const parsed: unknown = JSON.parse(response);
           if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
