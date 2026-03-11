@@ -312,11 +312,18 @@ export class RunMatchUseCase {
       // If a bot outputs a JSON object (e.g. {"0": 8}), merge its keys directly
       // so the judger receives {"0": 8} instead of {"0": "{\"0\":8}"}.
       const botResponses: Record<string, unknown> = {};
+      const roundDebugLegacy: Record<string, string | null> = {};
       for (const [botId, response] of botResults) {
         try {
           const parsed: unknown = JSON.parse(response);
           if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-            Object.assign(botResponses, parsed); // merge {"0": 8} directly
+            const obj = parsed as Record<string, unknown>;
+            // Extract debug field if bot used JSON output format {"move":..., "debug":"..."}
+            if ('debug' in obj) {
+              roundDebugLegacy[`bot_${botId}`] = String(obj.debug ?? '');
+              delete obj.debug;
+            }
+            Object.assign(botResponses, obj); // merge {"0": 8} directly
           } else {
             botResponses[botId] = parsed; // primitive: number/string/bool
           }
@@ -325,7 +332,13 @@ export class RunMatchUseCase {
         }
       }
 
-      match.addLog({ round, judgeCmd, botResponses });
+      const hasLegacyDebug = Object.keys(roundDebugLegacy).length > 0;
+      match.addLog({
+        round,
+        judgeCmd,
+        botResponses,
+        ...(hasLegacyDebug ? { debug: roundDebugLegacy } : {}),
+      });
       judgerHistory.requests.push(JSON.stringify(botResponses));
 
       if (task.callback.update) {
