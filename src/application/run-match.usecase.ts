@@ -523,7 +523,11 @@ export class RunMatchUseCase {
       }
 
       // verdict === 'continue': run each bot
-      const botEntries = Object.entries(judgeOut.commands).filter(([id]) => bots.has(id));
+      // Skip bots with null/undefined commands — they are inactive this round
+      // (e.g. Blackjack: only the current player receives a non-null command)
+      const botEntries = Object.entries(judgeOut.commands).filter(
+        ([id, cmd]) => bots.has(id) && cmd != null,
+      );
 
       const botResults = await Promise.all(
         botEntries.map(async ([botId, command]) => {
