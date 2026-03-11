@@ -22,6 +22,7 @@ import { ILanguage } from './languages/language.interface';
 import { CppLanguage } from './languages/cpp.language';
 import { PythonLanguage } from './languages/python.language';
 import { TypeScriptLanguage } from './languages/typescript.language';
+import { JavaScriptLanguage } from './languages/javascript.language';
 
 interface CacheEntry {
   compiled: CompiledBot;
@@ -45,7 +46,12 @@ export class CompileService {
     @InjectMetric('botzone_compile_cache_hits_total') private readonly cacheHits: Counter,
     @InjectMetric('botzone_compile_cache_misses_total') private readonly cacheMisses: Counter,
   ) {
-    const langs: ILanguage[] = [new CppLanguage(), new PythonLanguage(), new TypeScriptLanguage()];
+    const langs: ILanguage[] = [
+      new CppLanguage(),
+      new PythonLanguage(),
+      new TypeScriptLanguage(),
+      new JavaScriptLanguage(),
+    ];
     for (const lang of langs) {
       this.languages.set(lang.name, lang);
     }
