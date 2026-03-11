@@ -318,12 +318,16 @@ export class RunMatchUseCase {
           const parsed: unknown = JSON.parse(response);
           if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
             const obj = parsed as Record<string, unknown>;
-            // Extract debug field if bot used JSON output format {"move":..., "debug":"..."}
-            if ('debug' in obj) {
-              roundDebugLegacy[`bot_${botId}`] = String(obj.debug ?? '');
-              delete obj.debug;
+            // Case 1: bot used {"move": value, "debug": "..."} envelope format
+            if ('move' in obj) {
+              if ('debug' in obj) {
+                roundDebugLegacy[`bot_${botId}`] = String(obj.debug ?? '');
+              }
+              botResponses[botId] = obj.move;
+            } else {
+              // Case 2: bot output player-keyed dict {"0": 8} — merge directly
+              Object.assign(botResponses, obj);
             }
-            Object.assign(botResponses, obj); // merge {"0": 8} directly
           } else {
             botResponses[botId] = parsed; // primitive: number/string/bool
           }
